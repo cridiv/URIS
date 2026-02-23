@@ -1,7 +1,3 @@
-import json
-import re
-from ...utils.bedrock import invoke_nova
-
 PLANNER_SYSTEM_PROMPT = """
 You are URIS Planner Agent — a specialized data quality intelligence system.
 
@@ -55,29 +51,3 @@ Rules:
 - Never ask clarifying questions. Commit to a plan and explain assumptions
 - Output only the JSON object, no markdown, no explanation outside the JSON
 """
-
-def run_planner(dataset_summary: dict, user_goal: str) -> dict:
-    user_message = f"""
-Dataset Summary:
-{json.dumps(dataset_summary, indent=2)}
-
-User Goal:
-{user_goal}
-
-Produce the structured plan now.
-"""
-    
-    raw_output = invoke_nova(PLANNER_SYSTEM_PROMPT, user_message)
-    
-    # Strip markdown code blocks if Nova wraps the JSON anyway
-    cleaned = re.sub(r"```json|```", "", raw_output).strip()
-    
-    try:
-        plan = json.loads(cleaned)
-        return {"status": "success", "plan": plan}
-    except json.JSONDecodeError as e:
-        return {
-            "status": "error",
-            "message": f"Planner output was not valid JSON: {str(e)}",
-            "raw_output": raw_output
-        }
