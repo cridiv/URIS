@@ -1,6 +1,6 @@
 import json
 import re
-from app.utils.bedrock import invoke_nova
+from ...utils.bedrock import invoke_nova
 
 PLANNER_SYSTEM_PROMPT = """
 You are URIS Planner Agent — a specialized data quality intelligence system.
