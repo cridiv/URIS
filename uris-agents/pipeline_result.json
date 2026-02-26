@@ -1,0 +1,160 @@
+{
+  "status": "partial_synthesis",
+  "warning": "Synthesis ran but some checks failed",
+  "trace": [
+    "Starting Evaluation...",
+    "Evaluation complete",
+    "Running Planner...",
+    "Planner complete",
+    "Running Compliance...",
+    "Compliance complete",
+    "Starting Synthesis Agent...",
+    "Synthesis Agent finished: partial"
+  ],
+  "evaluation": {
+    "schema_summary": {
+      "num_rows": 891,
+      "num_columns": 12,
+      "duplicate_rows_pct": 0.0,
+      "potential_keys": []
+    },
+    "quality_scores": {
+      "completeness": 0.838,
+      "uniqueness": 1.0,
+      "balance": 0.616,
+      "distribution_quality": 0.895,
+      "consistency": 0.975
+    },
+    "adfi": 0.831,
+    "critical_gaps": [
+      {
+        "severity": "medium",
+        "description": "High missing rate in the Age column.",
+        "affected_columns": ["Age"]
+      },
+      {
+        "severity": "high",
+        "description": "Very high missing rate in the Cabin column.",
+        "affected_columns": ["Cabin"]
+      }
+    ],
+    "recommended_focus": "completeness",
+    "confidence": 0.95
+  },
+  "plan": {
+    "objective": "Prepare dataset for binary classification predicting survival (Survived column)",
+    "target_column": "Survived",
+    "constraints": [
+      "Address missing values in Age and Cabin columns",
+      "Ensure compliance with data protection regulations",
+      "Maintain data balance for binary classification"
+    ],
+    "risk_tolerance": "medium"
+  },
+  "compliance": {
+    "pii_findings": [
+      {
+        "column": "Name",
+        "pii_type": "direct_identifier",
+        "confidence": 0.99,
+        "severity": "high"
+      }
+    ],
+    "regulatory_exposure": {
+      "GDPR": "high",
+      "CCPA": "high",
+      "HIPAA": "none"
+    },
+    "re_identification_risk": {
+      "score": 0.2,
+      "contributing_columns": ["Age", "SibSp", "Parch", "Fare", "Embarked"]
+    },
+    "privacy_risk_score": 0.3,
+    "blocked_columns": ["Name"],
+    "recommended_actions": [
+      {
+        "column": "Name",
+        "action": "extract_then_drop",
+        "reason": "Name is a direct identifier and has extractable structure.",
+        "extraction_detail": "Extract title into new column `Name_title` before dropping `Name`."
+      }
+    ],
+    "confidence": 0.95
+  },
+  "synthesis": {
+    "status": "partial",
+    "attempt": 3,
+    "warning": "Some privacy or correlation checks failed after max retries",
+    "strategy_used": {
+      "augmentation_budget": 588,
+      "columns_to_extract_first": [],
+      "columns_to_exclude": [],
+      "priority_preserve_columns": ["Age", "Cabin"],
+      "fallback_strategy": "SDV GaussianCopula",
+      "confidence": 0.85
+    },
+    "synthesis_report": {
+      "status": "success",
+      "strategy": "SDV_GaussianCopula",
+      "rows_before": 891,
+      "rows_generated": 588,
+      "rows_after": 1479,
+      "metadata_detected_columns": 11
+    },
+    "imputation_report": {
+      "Age": {
+        "action": "median_imputed",
+        "value": 28.0,
+        "null_rate_before": 0.199
+      },
+      "Cabin": {
+        "action": "dropped",
+        "reason": "77.1% missing — too sparse"
+      },
+      "Embarked": {
+        "action": "mode_or_unknown_imputed",
+        "value": "S",
+        "null_rate_before": 0.002
+      }
+    },
+    "privacy_report": {
+      "status": "fail",
+      "overall_pass": false,
+      "recommendation": "retry",
+      "exact_match": {
+        "exact_matches_count": 712,
+        "pass": false,
+        "details": "712 exact row matches found between real and synthetic data."
+      },
+      "nn_metrics": {
+        "median_dcr": null,
+        "median_nndr": null,
+        "dcr_pass": false,
+        "nndr_pass": false,
+        "overall_pass": false,
+        "percent_too_close": 0.0
+      }
+    },
+    "correlation_report": {
+      "status": "fail",
+      "recommendation": "retry",
+      "drift_metrics": {
+        "status": "fail",
+        "max_pair_difference": 0.1677,
+        "frobenius_norm": 0.4533,
+        "mean_column_max_drift": 0.126,
+        "thresholds": {
+          "max_pair_difference": 0.15,
+          "frobenius_norm": 0.25,
+          "mean_column_drift": 0.2
+        },
+        "individual_passes": {
+          "pairwise": false,
+          "frobenius": false,
+          "column_level": true
+        },
+        "overall_pass": false
+      }
+    }
+  }
+}
