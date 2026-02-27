@@ -1,11 +1,11 @@
-import os
-import shutil
 import uuid
 from typing import Optional, Dict, Any
+import pandas as pd
 from .evaluation.agent import run_evaluation
 from .planner.agent import run_planner
 from .compliance.agent import run_compliance
 from .synthesis.agent import run_synthesis_agent
+from .validation.agent import run_validation
 
 
 def run_pipeline(
@@ -15,15 +15,15 @@ def run_pipeline(
     target_column: Optional[str] = None,
 ) -> Dict[str, Any]:
     """
-    Full URIS pipeline: Evaluation → Planner → Compliance → Synthesis (if needed)
-    Returns augmented dataset path (if synthesis ran) + all intermediate results
+    Full URIS pipeline:
+    Evaluation → Planner → Compliance → Synthesis → Validation
+    If validation rejects, synthesis retries once with rejection context.
     """
 
     trace = []
-    temp_files_to_clean = []
 
     try:
-        # ── 1. Evaluation ────────────────────────────────────────
+        # ── 1. Evaluation ─────────────────────────────────────────
         trace.append("Starting Evaluation...")
         evaluation_result = run_evaluation(
             dataset_path=dataset_path,
@@ -42,7 +42,7 @@ def run_pipeline(
         evaluation = evaluation_result["evaluation"]
         trace.append("Evaluation complete")
 
-        # ── 2. Planner ───────────────────────────────────────────
+        # ── 2. Planner ────────────────────────────────────────────
         trace.append("Running Planner...")
         planner_result = run_planner(
             dataset_summary=evaluation,
@@ -60,7 +60,7 @@ def run_pipeline(
         plan = planner_result["plan"]
         trace.append("Planner complete")
 
-        # Filter out evaluation (already done) and re-prioritize
+        # Filter evaluation tasks — already ran
         plan["ordered_tasks"] = [
             t for t in plan["ordered_tasks"]
             if t["agent"] != "evaluation"
@@ -68,7 +68,7 @@ def run_pipeline(
         for i, task in enumerate(plan["ordered_tasks"], start=1):
             task["priority"] = i
 
-        # ── 3. Compliance ────────────────────────────────────────
+        # ── 3. Compliance ─────────────────────────────────────────
         trace.append("Running Compliance...")
         compliance_result = run_compliance(
             dataset_path=dataset_path,
@@ -84,24 +84,26 @@ def run_pipeline(
             }
 
         compliance = compliance_result["compliance"]
+        blocked_columns = compliance["blocked_columns"]
         trace.append("Compliance complete")
 
-        # Block synthesis if high privacy risk or no synthesis in plan
-        needs_synthesis = any(t["agent"] == "synthesis" for t in plan["ordered_tasks"])
-
+        # Skip synthesis if not needed
+        needs_synthesis = any(
+            t["agent"] == "synthesis" for t in plan["ordered_tasks"]
+        )
         if not needs_synthesis:
-            trace.append("No synthesis tasks in plan → skipping synthesis")
+            trace.append("No synthesis tasks in plan — skipping synthesis")
             return {
                 "status": "success_no_synthesis",
                 "trace": trace,
                 "evaluation": evaluation,
                 "plan": plan,
                 "compliance": compliance,
-                "blocked_columns": compliance["blocked_columns"],
+                "blocked_columns": blocked_columns,
                 "original_dataset_path": dataset_path,
             }
 
-        # ── 4. Synthesis ─────────────────────────────────────────
+        # ── 4. Synthesis ──────────────────────────────────────────
         trace.append("Starting Synthesis Agent...")
         synthesis_result = run_synthesis_agent(
             dataset_path=dataset_path,
@@ -109,49 +111,125 @@ def run_pipeline(
             compliance=compliance,
             task_type=task_type,
             target_column=target_column,
-            max_retries=3
+            max_retries=3,
         )
-
         trace.append(f"Synthesis Agent finished: {synthesis_result['status']}")
 
-        if synthesis_result["status"] == "success":
-            # Save augmented dataset to a temp file for download / further use
-            augmented_id = uuid.uuid4().hex
-            augmented_path = f"tmp_uploads/augmented_{augmented_id}.csv"
-            synthesis_result["final_dataframe"].to_csv(augmented_path, index=False)
-            temp_files_to_clean.append(augmented_path)  # optional cleanup later
-
-            # Remove DataFrame from result before JSON serialization
-            synthesis_result_clean = {k: v for k, v in synthesis_result.items() if k != "final_dataframe"}
-
+        # If synthesis completely failed — return early
+        if synthesis_result["status"] == "fallback":
+            synthesis_clean = {
+                k: v for k, v in synthesis_result.items()
+                if k != "final_dataframe"
+            }
             return {
-                "status": "success",
+                "status": "synthesis_failed",
                 "trace": trace,
                 "evaluation": evaluation,
                 "plan": plan,
                 "compliance": compliance,
-                "synthesis": {
-                    "result": synthesis_result_clean,
-                    "augmented_rows": synthesis_result["augmented_rows"],
-                    "augmented_dataset_path": augmented_path,
-                },
-                "blocked_columns": compliance["blocked_columns"],
+                "synthesis": synthesis_clean,
+                "blocked_columns": blocked_columns,
+                "warning": "Synthesis exhausted all retries — original dataset unchanged"
             }
 
-        else:
-            # Partial or failed synthesis → return what we have + warning
-            # Remove non-serializable DataFrame if present
-            synthesis_result_clean = {k: v for k, v in synthesis_result.items() if k != "final_dataframe"}
-            
-            return {
-                "status": "partial_synthesis",
-                "trace": trace,
-                "evaluation": evaluation,
-                "plan": plan,
-                "compliance": compliance,
-                "synthesis": synthesis_result_clean,
-                "warning": "Synthesis ran but some checks failed",
+        augmented_df = synthesis_result["final_dataframe"]
+        original_df = pd.read_csv(dataset_path)
+
+        # ── 5. Validation ─────────────────────────────────────────
+        trace.append("Starting Validation Agent...")
+        validation_result = run_validation(
+            original_df=original_df,
+            augmented_df=augmented_df,
+            evaluation=evaluation,
+            synthesis_report=synthesis_result.get("synthesis_report", {}),
+            target_column=target_column,
+            blocked_columns=blocked_columns,
+        )
+        trace.append(f"Validation verdict: {validation_result.get('verdict', 'error')}")
+
+        if validation_result["status"] == "error":
+            trace.append(f"Validation agent error: {validation_result['message']}")
+
+        # ── 6. Closed-loop retry if validation rejects ────────────
+        if (
+            validation_result.get("status") == "success" and
+            validation_result.get("verdict") == "reject"
+        ):
+            trace.append("Validation rejected synthesis — retrying with rejection context")
+
+            rejection_context = {
+                "previous_attempt_failed": True,
+                "rejection_reasons": validation_result["validation"].get("rejection_reasons", []),
+                "synthesis_adjustments": validation_result["validation"].get("synthesis_adjustments", {}),
+                "previous_budget": synthesis_result.get("augmented_rows", 0),
+                "previous_verdict_confidence": validation_result.get("confidence", 0.0),
             }
+
+            trace.append("Re-running Synthesis Agent with rejection context...")
+            synthesis_result = run_synthesis_agent(
+                dataset_path=dataset_path,
+                evaluation=evaluation,
+                compliance=compliance,
+                task_type=task_type,
+                target_column=target_column,
+                max_retries=3,
+                rejection_context=rejection_context,
+            )
+            trace.append(f"Synthesis retry finished: {synthesis_result['status']}")
+
+            if synthesis_result["status"] != "fallback":
+                augmented_df = synthesis_result["final_dataframe"]
+
+                # Re-run validation on the new augmented dataset
+                trace.append("Re-running Validation Agent...")
+                validation_result = run_validation(
+                    original_df=original_df,
+                    augmented_df=augmented_df,
+                    evaluation=evaluation,
+                    synthesis_report=synthesis_result.get("synthesis_report", {}),
+                    target_column=target_column,
+                    blocked_columns=blocked_columns,
+                )
+                trace.append(f"Final validation verdict: {validation_result.get('verdict', 'error')}")
+            else:
+                trace.append("Synthesis retry also failed — using original dataset")
+                augmented_df = original_df
+
+        # ── 7. Save augmented dataset ─────────────────────────────
+        augmented_id = uuid.uuid4().hex
+        augmented_path = f"tmp_uploads/augmented_{augmented_id}.csv"
+        augmented_df.to_csv(augmented_path, index=False)
+
+        # Clean non-serializable fields
+        synthesis_clean = {
+            k: v for k, v in synthesis_result.items()
+            if k != "final_dataframe"
+        }
+        validation_clean = {
+            k: v for k, v in validation_result.items()
+            if k != "raw_nova_output"
+        }
+
+        final_status = (
+            "success"
+            if validation_result.get("verdict") == "accept"
+            else "success_with_warnings"
+        )
+
+        return {
+            "status": final_status,
+            "trace": trace,
+            "evaluation": evaluation,
+            "plan": plan,
+            "compliance": compliance,
+            "synthesis": {
+                "result": synthesis_clean,
+                "augmented_rows": synthesis_result.get("augmented_rows", 0),
+                "augmented_dataset_path": augmented_path,
+            },
+            "validation": validation_clean,
+            "blocked_columns": blocked_columns,
+        }
 
     except Exception as e:
         return {
