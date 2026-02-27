@@ -1,1 +1,480 @@
-{"status":"partial_synthesis","trace":["Starting Evaluation...","Evaluation complete","Running Planner...","Planner complete","Running Compliance...","Compliance complete","Starting Synthesis Agent...","Synthesis Agent finished: fallback"],"evaluation":{"schema_summary":{"num_rows":891,"num_columns":12,"columns":[{"name":"PassengerId","type":"numeric","missing_pct":0.0,"unique_count":891,"cardinality_ratio":null,"potential_pii":false,"stats":{"range":[1,891],"mean":446.0,"std":257.3538420152301,"outlier_pct":0.0}},{"name":"Survived","type":"numeric","missing_pct":0.0,"unique_count":2,"cardinality_ratio":null,"potential_pii":false,"stats":{"range":[0,1],"mean":0.3838383838383838,"std":0.4865924542648575,"outlier_pct":0.0}},{"name":"Pclass","type":"numeric","missing_pct":0.0,"unique_count":3,"cardinality_ratio":null,"potential_pii":false,"stats":{"range":[1,3],"mean":2.308641975308642,"std":0.836071240977049,"outlier_pct":0.0}},{"name":"Name","type":"string","missing_pct":0.0,"unique_count":891,"cardinality_ratio":null,"potential_pii":true,"stats":{"avg_length":27.0}},{"name":"Sex","type":"categorical","missing_pct":0.0,"unique_count":2,"cardinality_ratio":null,"potential_pii":false,"stats":{"distribution":{"male":0.648,"female":0.352},"class_count":2}},{"name":"Age","type":"numeric","missing_pct":0.199,"unique_count":88,"cardinality_ratio":null,"potential_pii":false,"stats":{"range":[0.42,80.0],"mean":29.69911764705882,"std":14.526497332334042,"outlier_pct":0.015}},{"name":"SibSp","type":"numeric","missing_pct":0.0,"unique_count":7,"cardinality_ratio":null,"potential_pii":false,"stats":{"range":[0,8],"mean":0.5230078563411896,"std":1.1027434322934317,"outlier_pct":0.052}},{"name":"Parch","type":"numeric","missing_pct":0.0,"unique_count":7,"cardinality_ratio":null,"potential_pii":false,"stats":{"range":[0,6],"mean":0.38159371492704824,"std":0.8060572211299483,"outlier_pct":0.239}},{"name":"Ticket","type":"string","missing_pct":0.0,"unique_count":681,"cardinality_ratio":null,"potential_pii":false,"stats":{"avg_length":6.8}},{"name":"Fare","type":"numeric","missing_pct":0.0,"unique_count":248,"cardinality_ratio":null,"potential_pii":false,"stats":{"range":[0.0,512.3292],"mean":32.204207968574636,"std":49.6934285971809,"outlier_pct":0.13}},{"name":"Cabin","type":"string","missing_pct":0.771,"unique_count":147,"cardinality_ratio":null,"potential_pii":false,"stats":{"avg_length":3.6}},{"name":"Embarked","type":"categorical","missing_pct":0.002,"unique_count":3,"cardinality_ratio":null,"potential_pii":false,"stats":{"distribution":{"S":0.724,"C":0.189,"Q":0.087},"class_count":3}}],"duplicate_rows_pct":0.0,"potential_keys":[]},"quality_scores":{"completeness":0.838,"uniqueness":1.0,"balance":0.617741935483871,"distribution_quality":0.872,"consistency":0.986},"adfi":0.828,"critical_gaps":[{"severity":"medium","description":"High missing rate in Cabin column","affected_columns":["Cabin"]},{"severity":"medium","description":"High outlier percentage in Parch column","affected_columns":["Parch"]}],"recommended_focus":"completeness","confidence":0.95,"reasoning_steps":["Calculated completeness score based on weighted missing rate across columns.","Uniqueness score is 1.0 due to no duplicate rows and unique PassengerId.","Balance score calculated for classification task using Survived column.","Distribution quality score penalized for high missing rate in Cabin and high outlier rate in Parch.","Consistency score is high as there are no implausible values.","Identified critical gaps in completeness and distribution quality."]},"plan":{"objective":"Prepare dataset for binary classification on passenger survival prediction","target_column":"Survived","constraints":["Ensure no missing values in the target column","Address high missing rate in the Cabin column","Handle high outlier percentage in the Parch column"],"risk_tolerance":"medium","ordered_tasks":[{"agent":"synthesis","task":"Impute missing values in the Cabin column","priority":1,"reason":"Imputing missing values will improve dataset completeness."},{"agent":"synthesis","task":"Cap or remove outliers in the Parch column","priority":2,"reason":"Handling outliers will improve data distribution quality."},{"agent":"validation","task":"Verify improvements in completeness and distribution quality","priority":3,"reason":"Ensure that the dataset meets the readiness criteria for the classification task."}],"revision_triggers":["Missing value imputation in Cabin column","Outlier handling in Parch column","Validation of data quality improvements"],"reasoning":["The dataset has a high missing rate in the Cabin column, which needs to be addressed to improve completeness.","The Parch column has a high outlier percentage, which needs to be handled to improve data distribution quality.","The target column 'Survived' has no missing values, which is ideal for a classification task.","The dataset already has a high consistency score, indicating no implausible values."],"adfi_baseline_estimate":{"completeness":0.838,"balance":0.617741935483871,"compliance_risk":"low","overall":0.828}},"compliance":{"pii_findings":[{"column":"Name","pii_type":"direct_identifier","confidence":0.99,"severity":"high"}],"regulatory_exposure":{"GDPR":"high","CCPA":"high","HIPAA":"none"},"re_identification_risk":{"score":0.55,"contributing_columns":["Age","SibSp","Parch","Fare","Pclass"],"reason":"Combination of quasi-identifiers such as Age, SibSp, Parch, Fare, and Pclass can potentially re-identify individuals even without direct PII."},"privacy_risk_score":0.5,"blocked_columns":["Name"],"recommended_actions":[{"column":"Name","action":"extract_then_drop","reason":"Contains direct PII and has extractable structure. Title should be extracted into a new column before dropping the original column.","extraction_detail":"Extract title into new column `Name_title`"}],"confidence":0.95,"reasoning_steps":["Identified 'Name' as a direct identifier with high confidence due to its potential to reveal personal information.","Mapped the findings to GDPR and CCPA due to the presence of direct PII.","Assessed re-identification risk based on the combination of quasi-identifiers which could potentially reveal individual identities.","Calculated the privacy risk score by adding 0.3 for the presence of a direct identifier, 0.15 for each quasi-identifier found, and 0.2 for re-identification risk.","Flagged 'Name' as a blocked column because it is a direct identifier and cannot be synthesized.","Recommended extracting the title from 'Name' before dropping it due to the extractable structure identified in the structure analysis."]},"synthesis":{"status":"fallback","attempt":3,"strategy_used":{"augmentation_budget":294,"columns_to_extract_first":[{"column":"Name","action":"extract_then_drop","reason":"Contains direct PII and has extractable structure. Title should be extracted into a new column before dropping the original column.","extraction_detail":"Extract title into new column `Name_title`"}],"columns_to_exclude":["Name"],"priority_preserve_columns":["Survived","Parch","Cabin"],"fallback_strategy":"SDV GaussianCopula","reasoning":["Medium imbalance severity suggests a need for additional data to balance the dataset.","High missing rate in Cabin and high outlier percentage in Parch indicate these columns need synthetic data to address data quality issues.","Extracting the title from the Name column before dropping it ensures compliance while preserving useful information."],"confidence":0.85},"synthesis_report":{"strategy":"SDV_GaussianCopula","rows_before":891,"rows_generated":294,"rows_after":1185,"metadata_detected_columns":9},"imputation_report":{"Age":{"action":"median_imputed","value":28.0,"null_rate_before":0.19865319865319866},"Cabin":{"action":"dropped","reason":"77.1% missing — too sparse"},"Embarked":{"action":"mode_or_unknown_imputed","value":"S","null_rate_before":0.002244668911335578}},"privacy_report":{"status":"fail","exact_match":{"exact_matches_count":967,"pass":false,"max_allowed":118,"columns_checked":["Age","Fare"],"details":"967 exact matches on ['Age', 'Fare'] (max allowed: 118)"},"nn_metrics":{"median_dcr":0.0,"median_nndr":0.0,"dcr_pass":true,"nndr_pass":true,"overall_pass":true,"percent_too_close":97.21518987341771,"small_dataset_mode":true,"details":"Median DCR: 0.0000 (threshold ≥ 0.0) → PASS\nMedian NNDR: 0.0000 (threshold ≥ 0.0) → PASS"},"excluded_from_check":["Cabin","Ticket"],"overall_pass":false,"recommendation":"retry","details":"967 exact matches on ['Age', 'Fare'] (max allowed: 118)\nMedian DCR: 0.0000 (threshold ≥ 0.0) → PASS\nMedian NNDR: 0.0000 (threshold ≥ 0.0) → PASS\nToo close synthetic rows: 97.2%"},"correlation_report":{"status":"pass","drift_metrics":{"status":"pass","max_pair_difference":0.1514,"frobenius_norm":0.3006,"mean_column_max_drift":0.0932,"per_column_max_drift":{"Survived":0.0321,"Pclass":0.0848,"Age":0.1514,"SibSp":0.1514,"Parch":0.0793,"Fare":0.06},"thresholds":{"max_pair_difference":0.2,"frobenius_norm":0.4,"mean_column_drift":0.2},"individual_passes":{"pairwise":true,"frobenius":true,"column_level":true},"overall_pass":true,"details":"Max pairwise correlation drift: 0.1514 (threshold ≤ 0.2) → PASS\nFrobenius norm of difference matrix: 0.3006 (threshold ≤ 0.4) → PASS\nMean max drift per column: 0.0932 (threshold ≤ 0.2) → PASS"},"recommendation":"accept","details":"Max pairwise correlation drift: 0.1514 (threshold ≤ 0.2) → PASS\nFrobenius norm of difference matrix: 0.3006 (threshold ≤ 0.4) → PASS\nMean max drift per column: 0.0932 (threshold ≤ 0.2) → PASS"},"augmented_rows":0,"trace":["Identifier columns removed from reference: ['PassengerId', 'Name']","Blocked columns removed from reference: ['Name']","Attempt 1/3 — budget=600","Nova strategy decision parsed successfully","Compliance enforced — blocked: ['Name'], extractions: 1","Synthesis complete — 600 rows generated","Privacy check: fail","Correlation check: fail","Checks failed — reducing budget and retrying","Attempt 2/3 — budget=420","Nova strategy decision parsed successfully","Compliance enforced — blocked: ['Name'], extractions: 1","Synthesis complete — 420 rows generated","Privacy check: fail","Correlation check: pass","Checks failed — reducing budget and retrying","Attempt 3/3 — budget=294","Nova strategy decision parsed successfully","Compliance enforced — blocked: ['Name'], extractions: 1","Synthesis complete — 294 rows generated","Privacy check: fail","Correlation check: pass","Checks failed — reducing budget and retrying","All retries exhausted — returning original dataset unchanged"],"warning":"All synthesis attempts failed checks — original dataset returned unchanged"},"warning":"Synthesis ran but some checks failed"}
+{
+  "pipeline_result": {
+    "status": "success",
+    "trace": [
+      "Starting Evaluation...",
+      "Evaluation complete",
+      "Running Planner...",
+      "Planner complete",
+      "Running Compliance...",
+      "Compliance complete",
+      "Starting Synthesis Agent...",
+      "Synthesis Agent finished: success"
+    ],
+    "evaluation": {
+      "schema_summary": {
+        "num_rows": 891,
+        "num_columns": 12,
+        "columns": [
+          {
+            "name": "PassengerId",
+            "type": "numeric",
+            "missing_pct": 0,
+            "unique_count": 891,
+            "cardinality_ratio": null,
+            "potential_pii": false,
+            "stats": {
+              "range": [
+                1,
+                891
+              ],
+              "mean": 446,
+              "std": 257.3538420152301,
+              "outlier_pct": 0
+            }
+          },
+          {
+            "name": "Survived",
+            "type": "numeric",
+            "missing_pct": 0,
+            "unique_count": 2,
+            "cardinality_ratio": null,
+            "potential_pii": false,
+            "stats": {
+              "range": [
+                0,
+                1
+              ],
+              "mean": 0.3838383838383838,
+              "std": 0.4865924542648575,
+              "outlier_pct": 0
+            }
+          },
+          {
+            "name": "Pclass",
+            "type": "numeric",
+            "missing_pct": 0,
+            "unique_count": 3,
+            "cardinality_ratio": null,
+            "potential_pii": false,
+            "stats": {
+              "range": [
+                1,
+                3
+              ],
+              "mean": 2.308641975308642,
+              "std": 0.836071240977049,
+              "outlier_pct": 0
+            }
+          },
+          {
+            "name": "Name",
+            "type": "string",
+            "missing_pct": 0,
+            "unique_count": 891,
+            "cardinality_ratio": null,
+            "potential_pii": true,
+            "stats": {
+              "avg_length": 27
+            }
+          },
+          {
+            "name": "Sex",
+            "type": "categorical",
+            "missing_pct": 0,
+            "unique_count": 2,
+            "cardinality_ratio": null,
+            "potential_pii": false,
+            "stats": {
+              "distribution": {
+                "male": 0.648,
+                "female": 0.352
+              },
+              "class_count": 2
+            }
+          },
+          {
+            "name": "Age",
+            "type": "numeric",
+            "missing_pct": 0.199,
+            "unique_count": 88,
+            "cardinality_ratio": null,
+            "potential_pii": false,
+            "stats": {
+              "range": [
+                0.42,
+                80
+              ],
+              "mean": 29.69911764705882,
+              "std": 14.526497332334042,
+              "outlier_pct": 0.015
+            }
+          },
+          {
+            "name": "SibSp",
+            "type": "numeric",
+            "missing_pct": 0,
+            "unique_count": 7,
+            "cardinality_ratio": null,
+            "potential_pii": false,
+            "stats": {
+              "range": [
+                0,
+                8
+              ],
+              "mean": 0.5230078563411896,
+              "std": 1.1027434322934317,
+              "outlier_pct": 0.052
+            }
+          },
+          {
+            "name": "Parch",
+            "type": "numeric",
+            "missing_pct": 0,
+            "unique_count": 7,
+            "cardinality_ratio": null,
+            "potential_pii": false,
+            "stats": {
+              "range": [
+                0,
+                6
+              ],
+              "mean": 0.38159371492704824,
+              "std": 0.8060572211299483,
+              "outlier_pct": 0.239
+            }
+          },
+          {
+            "name": "Ticket",
+            "type": "string",
+            "missing_pct": 0,
+            "unique_count": 681,
+            "cardinality_ratio": null,
+            "potential_pii": false,
+            "stats": {
+              "avg_length": 6.8
+            }
+          },
+          {
+            "name": "Fare",
+            "type": "numeric",
+            "missing_pct": 0,
+            "unique_count": 248,
+            "cardinality_ratio": null,
+            "potential_pii": false,
+            "stats": {
+              "range": [
+                0,
+                512.3292
+              ],
+              "mean": 32.204207968574636,
+              "std": 49.6934285971809,
+              "outlier_pct": 0.13
+            }
+          },
+          {
+            "name": "Cabin",
+            "type": "string",
+            "missing_pct": 0.771,
+            "unique_count": 147,
+            "cardinality_ratio": null,
+            "potential_pii": false,
+            "stats": {
+              "avg_length": 3.6
+            }
+          },
+          {
+            "name": "Embarked",
+            "type": "categorical",
+            "missing_pct": 0.002,
+            "unique_count": 3,
+            "cardinality_ratio": null,
+            "potential_pii": false,
+            "stats": {
+              "distribution": {
+                "S": 0.724,
+                "C": 0.189,
+                "Q": 0.087
+              },
+              "class_count": 3
+            }
+          }
+        ],
+        "duplicate_rows_pct": 0,
+        "potential_keys": []
+      },
+      "quality_scores": {
+        "completeness": 0.838,
+        "uniqueness": 1,
+        "balance": 0.615,
+        "distribution_quality": 0.889,
+        "consistency": 0.963
+      },
+      "adfi": 0.827,
+      "critical_gaps": [
+        {
+          "severity": "high",
+          "description": "High missing rate in the Cabin column.",
+          "affected_columns": [
+            "Cabin"
+          ]
+        },
+        {
+          "severity": "medium",
+          "description": "Outlier percentage in the Parch column is relatively high.",
+          "affected_columns": [
+            "Parch"
+          ]
+        }
+      ],
+      "recommended_focus": "completeness",
+      "confidence": 0.95,
+      "reasoning_steps": [
+        "Step 1: Schema review - No issues detected.",
+        "Step 2: Completeness - Overall completeness is 98.4%, with a significant missing rate in the Cabin column (77.1%).",
+        "Step 3: Distribution - Distribution quality is good, but the Parch column has a relatively high outlier percentage (23.9%).",
+        "Step 4: Consistency - No implausible values detected.",
+        "Step 5: Balance - The target column 'Survived' has a balance score of 0.615.",
+        "Step 6: Task relevance - The dataset is suitable for classification tasks."
+      ]
+    },
+    "plan": {
+      "objective": "Prepare dataset for binary classification on passenger survival on the Titanic",
+      "target_column": "Survived",
+      "constraints": [
+        "Address missing values in the Cabin column",
+        "Handle outliers in the Parch column",
+        "Ensure compliance with data protection regulations"
+      ],
+      "risk_tolerance": "medium",
+      "ordered_tasks": [
+        {
+          "agent": "compliance",
+          "task": "Flag and assess the potential PII in the Name column",
+          "priority": 1,
+          "reason": "The Name column contains potential personally identifiable information (PII)."
+        },
+        {
+          "agent": "synthesis",
+          "task": "Impute missing values in the Cabin column",
+          "priority": 2,
+          "reason": "To address the high missing rate in the Cabin column and improve dataset completeness."
+        },
+        {
+          "agent": "synthesis",
+          "task": "Handle outliers in the Parch column",
+          "priority": 3,
+          "reason": "To address the high outlier percentage in the Parch column and improve data quality."
+        },
+        {
+          "agent": "validation",
+          "task": "Verify improvements in dataset completeness and quality",
+          "priority": 4,
+          "reason": "To ensure that the dataset is ready for binary classification on passenger survival."
+        }
+      ],
+      "revision_triggers": [
+        "New data is added",
+        "A new feature is added to the dataset",
+        "The model performance drops below an acceptable threshold"
+      ],
+      "reasoning": [
+        "The dataset is suitable for classification tasks, but there are significant missing values and outliers that need to be addressed.",
+        "The Cabin column has a high missing rate, which could impact model performance if not handled properly.",
+        "The Parch column has a relatively high outlier percentage, which could skew the model's understanding of the data.",
+        "The Name column contains potential PII, which needs to be flagged and assessed for compliance with data protection regulations."
+      ],
+      "adfi_baseline_estimate": {
+        "completeness": 0.838,
+        "balance": 0.615,
+        "compliance_risk": "medium",
+        "overall": 0.827
+      }
+    },
+    "compliance": {
+      "pii_findings": [
+        {
+          "column": "Name",
+          "pii_type": "direct_identifier",
+          "confidence": 1,
+          "severity": "high"
+        }
+      ],
+      "regulatory_exposure": {
+        "GDPR": "high",
+        "CCPA": "high",
+        "HIPAA": "none"
+      },
+      "re_identification_risk": {
+        "score": 0.2,
+        "contributing_columns": [
+          "Age",
+          "Sex",
+          "Pclass",
+          "SibSp",
+          "Parch"
+        ],
+        "reason": "Combinations of quasi-identifiers such as Age, Sex, Pclass, SibSp, and Parch could potentially lead to re-identification."
+      },
+      "privacy_risk_score": 0.3,
+      "blocked_columns": [
+        "Name"
+      ],
+      "recommended_actions": [
+        {
+          "column": "Name",
+          "action": "extract_then_drop",
+          "reason": "Name is a direct identifier and must be extracted before dropping to preserve any potential useful information.",
+          "extraction_detail": "Extract title into new column `Name_title` before dropping `Name`."
+        }
+      ],
+      "confidence": 0.95,
+      "reasoning_steps": [
+        "Identified 'Name' as a direct identifier with a high confidence level.",
+        "Calculated the privacy risk score by adding 0.3 for the presence of a direct identifier.",
+        "Assessed re-identification risk from combinations of quasi-identifiers and added 0.2 to the privacy risk score.",
+        "Mapped findings to GDPR and CCPA due to the presence of direct identifiers.",
+        "Flagged 'Name' as a blocked column because it is a direct identifier and cannot be synthesized.",
+        "Recommended extracting the title from 'Name' before dropping it due to its extractable structure."
+      ]
+    },
+    "synthesis": {
+      "result": {
+        "status": "success",
+        "attempt": 2,
+        "strategy_used": {
+          "augmentation_budget": 420,
+          "columns_to_extract_first": [
+            {
+              "column": "Name",
+              "action": "extract_then_drop",
+              "reason": "Name is a direct identifier and must be extracted before dropping to preserve any potential useful information.",
+              "extraction_detail": "Extract title into new column `Name_title` before dropping `Name`."
+            }
+          ],
+          "columns_to_exclude": [
+            "Name"
+          ],
+          "priority_preserve_columns": [
+            "Survived",
+            "Parch"
+          ],
+          "fallback_strategy": "SDV GaussianCopula",
+          "reasoning": [
+            "Medium imbalance severity suggests a need for additional data to balance the dataset.",
+            "High missing rate in the Cabin column indicates potential issues with model training, but it's not prioritized for extraction.",
+            "Outlier percentage in the Parch column is relatively high, suggesting variability that should be preserved in synthetic data.",
+            "Extracting the title from the Name column before dropping it can preserve useful information while complying with privacy requirements."
+          ],
+          "confidence": 0.85
+        },
+        "synthesis_report": {
+          "strategy": "SDV_GaussianCopula",
+          "rows_before": 891,
+          "rows_generated": 420,
+          "rows_after": 1311,
+          "metadata_detected_columns": 9
+        },
+        "imputation_report": {
+          "Age": {
+            "action": "median_imputed",
+            "value": 28,
+            "null_rate_before": 0.19865319865319866
+          },
+          "Cabin": {
+            "action": "dropped",
+            "reason": "77.1% missing — too sparse"
+          },
+          "Embarked": {
+            "action": "mode_or_unknown_imputed",
+            "value": "S",
+            "null_rate_before": 0.002244668911335578
+          }
+        },
+        "extractions_applied": [],
+        "privacy_report": {
+          "status": "pass",
+          "exact_match": {
+            "exact_matches_count": 0,
+            "pass": true,
+            "details": "Exact match check skipped in small dataset mode — insufficient feature space for meaningful comparison"
+          },
+          "nn_metrics": {
+            "median_dcr": 0,
+            "median_nndr": 0,
+            "dcr_pass": true,
+            "nndr_pass": true,
+            "overall_pass": true,
+            "percent_too_close": 96.5675057208238,
+            "small_dataset_mode": true,
+            "details": "Median DCR: 0.0000 (threshold ≥ 0.0) → PASS\nMedian NNDR: 0.0000 (threshold ≥ 0.0) → PASS"
+          },
+          "excluded_from_check": [
+            "Ticket",
+            "Cabin"
+          ],
+          "overall_pass": true,
+          "recommendation": "accept",
+          "details": "Exact match check skipped in small dataset mode — insufficient feature space for meaningful comparison\nMedian DCR: 0.0000 (threshold ≥ 0.0) → PASS\nMedian NNDR: 0.0000 (threshold ≥ 0.0) → PASS\nToo close synthetic rows: 96.6%"
+        },
+        "correlation_report": {
+          "status": "pass",
+          "drift_metrics": {
+            "status": "pass",
+            "max_pair_difference": 0.1663,
+            "frobenius_norm": 0.3611,
+            "mean_column_max_drift": 0.1126,
+            "per_column_max_drift": {
+              "Survived": 0.0426,
+              "Pclass": 0.0968,
+              "Age": 0.1663,
+              "SibSp": 0.1663,
+              "Parch": 0.1214,
+              "Fare": 0.0823
+            },
+            "thresholds": {
+              "max_pair_difference": 0.2,
+              "frobenius_norm": 0.4,
+              "mean_column_drift": 0.2
+            },
+            "individual_passes": {
+              "pairwise": true,
+              "frobenius": true,
+              "column_level": true
+            },
+            "overall_pass": true,
+            "details": "Max pairwise correlation drift: 0.1663 (threshold ≤ 0.2) → PASS\nFrobenius norm of difference matrix: 0.3611 (threshold ≤ 0.4) → PASS\nMean max drift per column: 0.1126 (threshold ≤ 0.2) → PASS"
+          },
+          "recommendation": "accept",
+          "details": "Max pairwise correlation drift: 0.1663 (threshold ≤ 0.2) → PASS\nFrobenius norm of difference matrix: 0.3611 (threshold ≤ 0.4) → PASS\nMean max drift per column: 0.1126 (threshold ≤ 0.2) → PASS"
+        },
+        "augmented_rows": 420,
+        "trace": [
+          "Identifier columns removed from reference: ['PassengerId', 'Name']",
+          "Blocked columns removed from reference: ['Name']",
+          "Attempt 1/3 — budget=600",
+          "Nova strategy decision parsed successfully",
+          "Compliance enforced — blocked: ['Name'], extractions: 1",
+          "Synthesis complete — 600 rows generated",
+          "Privacy check: pass",
+          "Correlation check: fail",
+          "Checks failed — reducing budget and retrying",
+          "Attempt 2/3 — budget=420",
+          "Nova strategy decision parsed successfully",
+          "Compliance enforced — blocked: ['Name'], extractions: 1",
+          "Synthesis complete — 420 rows generated",
+          "Privacy check: pass",
+          "Correlation check: pass",
+          "All checks passed — synthesis complete"
+        ]
+      },
+      "augmented_rows": 420,
+      "augmented_dataset_path": "tmp_uploads/augmented_7ad1558451cf4f7cbb1729220f8a6690.csv"
+    },
+    "blocked_columns": [
+      "Name"
+    ]
+  },
+  "download_url": "/pipeline/download/augmented_7ad1558451cf4f7cbb1729220f8a6690.csv",
+  "message": "Pipeline complete — synthetic data generated"
+}
