@@ -98,6 +98,9 @@ export default function AgentResult() {
       display: "flex",
       flexDirection: "column",
       gap: 12,
+      height: "100%",
+      minHeight: 0,
+      overflow: "hidden",
     }}>
 
       {/* ── Risk Summary Card ── */}
@@ -189,6 +192,7 @@ export default function AgentResult() {
         background: "#fff", border: "1px solid #E1E4E8",
         borderRadius: 14, boxShadow: "0 1px 3px rgba(0,0,0,0.06)",
         overflow: "hidden", flex: 1, display: "flex", flexDirection: "column",
+        minHeight: 0,
       }}>
         <div style={{
           padding: "12px 16px 10px",
@@ -218,7 +222,7 @@ export default function AgentResult() {
           }}>run_004</span>
         </div>
 
-        <div style={{ padding: "10px 16px", flex: 1, display: "flex", flexDirection: "column" }}>
+        <div style={{ padding: "10px 16px", flex: 1, minHeight: 0, overflowY: "auto", display: "flex", flexDirection: "column" }}>
 
           <MetaRow label="Synthesis Attempts">
             <span style={{ color: "#0D1117" }}>12</span>

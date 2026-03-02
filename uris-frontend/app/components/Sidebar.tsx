@@ -93,8 +93,7 @@ const ChevronLeftIcon = () => (
 
 const NAV_ITEMS: NavItem[] = [
   { id: "datasets",   label: "Datasets",   icon: <DatabaseIcon />,   href: "/Datasets",  section: "main"   },
-  { id: "agents",     label: "Agents",     icon: <AgentsIcon />,     href: "/Agents",    badge: 12, section: "main" },
-  { id: "analytics",  label: "Analytics",  icon: <AnalyticsIcon />,  href: "/analytics", section: "main"   },
+  { id: "agents",     label: "Analysis",     icon: <AnalyticsIcon />,     href: "/Agents",    badge: 12, section: "main" },
   { id: "policies",   label: "Policies",   icon: <PoliciesIcon />,   href: "/policies",  section: "main"   },
   { id: "audit-log",  label: "Audit Log",  icon: <AuditIcon />,      href: "/audit-log", section: "main"   },
   { id: "settings",   label: "Settings",   icon: <SettingsIcon />,   href: "/settings",  section: "bottom" },
