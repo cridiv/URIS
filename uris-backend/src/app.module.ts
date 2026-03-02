@@ -1,10 +1,16 @@
 import { Module } from '@nestjs/common';
-import { AppController } from './app.controller';
-import { AppService } from './app.service';
+import { ConfigModule } from '@nestjs/config';
+import appConfig from './config/app.config';
+import { S3Module } from './aws/s3.module';
+import { DatasetModule } from './dataset/dataset.module';
 
 @Module({
-  imports: [],
-  controllers: [AppController],
-  providers: [AppService],
+  imports: [
+    ConfigModule.forRoot({
+      load: [appConfig],
+    }),
+    S3Module,
+    DatasetModule,
+  ],
 })
 export class AppModule {}

@@ -1,12 +1,12 @@
-from fastapi import FastAPI, UploadFile, File, Form
+from fastapi import APIRouter, UploadFile, File, Form
 from pydantic import BaseModel
-from ..agents.planner import run_planner
+from ..agents.planner.agent import run_planner
 from ..utils.profiler import profile_dataset
 import shutil
 import os
 import uuid
 
-app = FastAPI(title="URIS Agent Service")
+router = APIRouter(prefix="/analysis", tags=["analysis"])
 
 UPLOAD_DIR = "tmp_uploads"
 os.makedirs(UPLOAD_DIR, exist_ok=True)
@@ -17,14 +17,14 @@ class PlanRequest(BaseModel):
     user_goal: str
 
 
-@app.post("/plan")
+@router.post("/plan")
 def plan(request: PlanRequest):
     result = run_planner(request.dataset_summary, request.user_goal)
     return result
 
 
 # Profile only — useful for previewing dataset before planning
-@app.post("/profile")
+@router.post("/profile")
 async def profile(file: UploadFile = File(...)):
     tmp_path = f"{UPLOAD_DIR}/{uuid.uuid4()}_{file.filename}"
     with open(tmp_path, "wb") as buffer:
@@ -33,11 +33,12 @@ async def profile(file: UploadFile = File(...)):
         summary = profile_dataset(tmp_path)
         return {"status": "success", "dataset_summary": summary}
     finally:
-        os.remove(tmp_path)  # clean up
+        if os.path.exists(tmp_path):
+            os.remove(tmp_path)
 
 
-# Upload + profile + plan in one shot — this is the main flow
-@app.post("/analyze")
+# Upload + profile + plan in one shot
+@router.post("/analyze")
 async def analyze(file: UploadFile = File(...), user_goal: str = Form(...)):
     tmp_path = f"{UPLOAD_DIR}/{uuid.uuid4()}_{file.filename}"
     with open(tmp_path, "wb") as buffer:
@@ -48,12 +49,8 @@ async def analyze(file: UploadFile = File(...), user_goal: str = Form(...)):
         return {
             "status": "success",
             "dataset_summary": summary,
-            "plan": plan_result.get("plan")
+            "plan": plan_result,
         }
     finally:
-        os.remove(tmp_path)
-
-
-@app.get("/health")
-def health():
-    return {"status": "ok"}
+        if os.path.exists(tmp_path):
+            os.remove(tmp_path)

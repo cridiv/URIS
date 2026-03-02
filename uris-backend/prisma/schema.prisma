@@ -1,0 +1,32 @@
+// prisma/schema.prisma
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+model Dataset {
+  id          String   @id @default(cuid())
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  name        String               // original filename
+  s3Key       String   @unique     // path in your S3 bucket
+  s3Bucket    String               // bucket name
+  mimeType    String               // text/csv, application/json, etc.
+  sizeBytes   BigInt               // raw file size
+  source      String   @default("upload")
+  sourceKey   String?  // original key if imported from external S3
+  rowCount    Int?
+  columnCount Int?
+  columns     Json?    // [{ name, dtype, nullCount, uniqueCount }]
+  profileMeta Json?    // any extra stats the profiler returns
+  status      String   @default("pending")
+  errorMsg    String?
+
+  @@map("datasets")
+}
