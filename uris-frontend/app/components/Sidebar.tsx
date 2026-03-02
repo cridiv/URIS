@@ -85,9 +85,15 @@ const SettingsIcon = () => (
   </svg>
 );
 
+const ChevronLeftIcon = () => (
+  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <polyline points="15 18 9 12 15 6" />
+  </svg>
+);
+
 const NAV_ITEMS: NavItem[] = [
   { id: "datasets",   label: "Datasets",   icon: <DatabaseIcon />,   href: "/Datasets",  section: "main"   },
-  { id: "agents",     label: "Agents",     icon: <AgentsIcon />,     href: "/agents",    badge: 12, section: "main" },
+  { id: "agents",     label: "Agents",     icon: <AgentsIcon />,     href: "/Agents",    badge: 12, section: "main" },
   { id: "analytics",  label: "Analytics",  icon: <AnalyticsIcon />,  href: "/analytics", section: "main"   },
   { id: "policies",   label: "Policies",   icon: <PoliciesIcon />,   href: "/policies",  section: "main"   },
   { id: "audit-log",  label: "Audit Log",  icon: <AuditIcon />,      href: "/audit-log", section: "main"   },
@@ -95,7 +101,7 @@ const NAV_ITEMS: NavItem[] = [
 ];
 
 export default function Sidebar() {
-  const { isOpen } = useSidebar();
+  const { isOpen, toggle } = useSidebar();
   const pathname = usePathname();
   const active = NAV_ITEMS.find((i) => pathname.startsWith(i.href))?.id ?? "datasets";
 
@@ -111,13 +117,34 @@ export default function Sidebar() {
           transition: "transform 220ms cubic-bezier(0.22, 1, 0.36, 1), width 220ms cubic-bezier(0.22, 1, 0.36, 1)",
           width: isOpen ? "220px" : "0px",
         }}
-        className="fixed left-0 top-[52px] bottom-0 z-20 overflow-hidden bg-[#f9f9f9] border-r border-surface-200 flex flex-col"
+        className="fixed left-0 top-0 bottom-0 z-20 overflow-hidden bg-[#f9f9f9] border-r border-surface-200 flex flex-col"
       >
         <div className="flex flex-col h-full w-[220px] px-2 py-3">
-          {/* Section label */}
-          <p className="px-2.5 mb-1 text-[10px] font-semibold uppercase tracking-widest text-ink-400 font-mono select-none">
-            Navigation
-          </p>
+          {/* Toggle button */}
+          <button
+            onClick={toggle}
+            className="mb-2 w-full flex items-center justify-between px-2.5 py-1.5 rounded-lg text-[11px] font-medium text-ink-500 hover:bg-white/70 hover:text-ink-700 transition-all duration-150"
+            title="Close sidebar"
+          >
+
+                {/* Logo */}
+      <div className="flex items-center gap-2 select-none">
+        <div className="w-6 h-6 rounded-md bg-accent flex items-center justify-center flex-shrink-0">
+          <svg width="12" height="12" viewBox="0 0 14 14" fill="none">
+            <path d="M2 7L5.5 3.5L9 7L5.5 10.5L2 7Z" fill="white" opacity="0.55" />
+            <path d="M6 7L9.5 3.5L13 7L9.5 10.5L6 7Z" fill="white" />
+          </svg>
+        </div>
+        <span className="text-[13.5px] font-semibold tracking-tight text-ink-900">
+          URIS
+        </span>
+      </div>
+
+
+            <span className="text-ink-400 hover:text-ink-600">
+              <ChevronLeftIcon />
+            </span>
+          </button>
 
           {/* Main nav */}
           <nav className="flex flex-col gap-0.5 flex-1">
@@ -145,6 +172,19 @@ export default function Sidebar() {
           </div>
         </div>
       </aside>
+
+      {/* Floating toggle button when closed */}
+      {!isOpen && (
+        <button
+          onClick={toggle}
+          className="fixed left-3 top-[16px] z-30 w-9 h-9 flex items-center justify-center rounded-lg bg-white border border-surface-200 shadow-md hover:shadow-lg hover:bg-surface-50 text-ink-500 hover:text-ink-700 transition-all duration-150"
+          title="Open sidebar"
+        >
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <polyline points="9 18 15 12 9 6" />
+          </svg>
+        </button>
+      )}
     </>
   );
 }
