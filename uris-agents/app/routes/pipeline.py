@@ -90,9 +90,15 @@ async def run_uris_pipeline(
         # Schedule cleanup after download (or keep for 1h — up to you)
         background_tasks.add_task(cleanup_file, augmented_path)
 
+        download_url = f"/pipeline/download/{os.path.basename(augmented_path)}"
+
+        # Replace the local server path with the public download URL
+        result["synthesis"]["download_url"] = download_url
+        result["synthesis"].pop("augmented_dataset_path", None)
+
         response_data = {
             "pipeline_result": result,
-            "download_url": f"/pipeline/download/{os.path.basename(augmented_path)}",
+            "download_url": download_url,
             "message": "Pipeline complete — synthetic data generated"
         }
         return JSONResponse(content=clean_for_json(response_data))
