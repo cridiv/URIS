@@ -4,7 +4,12 @@ from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 import re
 from sdv.single_table import GaussianCopulaSynthesizer
-from sdv.metadata import SingleTableMetadata
+from sdv.metadata import Metadata
+import warnings
+
+# Suppress SDV warnings
+warnings.filterwarnings('ignore', category=FutureWarning, module='sdv')
+warnings.filterwarnings('ignore', category=UserWarning, module='sdv')
 
 
 # ─────────────────────────────────────────
@@ -130,12 +135,8 @@ def run_sdv_gaussian_copula(
 
     rows_before = len(df)
 
-    # Auto-detect metadata
-    metadata = SingleTableMetadata()
-    metadata.detect_from_dataframe(df_for_fit)
-
-    # Optional: you can later refine metadata (pii, sdtypes, etc.)
-    # metadata.update_column(column_name='email', sdtype='pii', pii_category='email_address')
+    # Auto-detect metadata using new Metadata class
+    metadata = Metadata.detect_from_dataframe(df_for_fit, table_name='table')
 
     synthesizer = GaussianCopulaSynthesizer(metadata)
     synthesizer.fit(df_for_fit)
@@ -154,7 +155,7 @@ def run_sdv_gaussian_copula(
         "rows_before": rows_before,
         "rows_generated": len(synthetic),
         "rows_after": len(final_df),
-        "metadata_detected_columns": len(metadata.columns),
+        "metadata_detected_columns": len(df_for_fit.columns),
     }
 
     return final_df, report
@@ -176,7 +177,12 @@ def run_synthesis(
       - augmentation_budget
       - target_column (optional — not used anymore with SDV-only)
     """
-    df = pd.read_csv(dataset_path)
+    # Read CSV with explicit comma delimiter (most common for URIS datasets)
+    try:
+        df = pd.read_csv(dataset_path, sep=",")
+    except Exception:
+        # Fallback to auto-detection if comma fails
+        df = pd.read_csv(dataset_path)
 
     # Extract fields from Nova's decision
     blocked_columns   = strategy_decision.get("columns_to_exclude", [])

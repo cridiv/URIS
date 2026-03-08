@@ -7,7 +7,6 @@ generator client {
 datasource db {
   provider  = "postgresql"
   url       = env("DATABASE_URL")
-  directUrl = env("DIRECT_URL")
 }
 
 model Dataset {
@@ -27,6 +26,26 @@ model Dataset {
   profileMeta Json?    // any extra stats the profiler returns
   status      String   @default("pending")
   errorMsg    String?
+  runs        AgentRun[] // one-to-many relation
 
   @@map("datasets")
+}
+
+model AgentRun {
+  id          String   @id @default(cuid())
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  datasetId   String
+  dataset     Dataset  @relation(fields: [datasetId], references: [id], onDelete: Cascade)
+  status      String   @default("analyzing") // analyzing, completed, failed
+  adfiScore   Float?   // filled after evaluation
+  complianceStatus String? // passed, failed, warning
+  task        String?  // binary_classification, regression, etc.
+  result      Json?    // full orchestration result
+  analysis    Json?    // saved analysis state { evaluation, compliance, synthesis, validation }
+  syntheticDataS3Key String?  // s3 path to generated synthetic CSV file
+  errorMsg    String?
+
+  @@map("agent_runs")
+  @@index([datasetId])
 }

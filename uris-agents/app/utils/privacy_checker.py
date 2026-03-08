@@ -104,10 +104,14 @@ def compute_nearest_neighbor_metrics(
     min_dist = np.min(dist_matrix, axis=1)
     sorted_dist = np.sort(dist_matrix, axis=1)
     second_min = sorted_dist[:, 1] if sorted_dist.shape[1] >= 2 else np.full(len(min_dist), np.inf)
-    nn_ratio = np.where(second_min > 0, min_dist / second_min, 1.0)
+    
+    # Suppress divide warnings and handle NaN/inf safely
+    with np.errstate(divide='ignore', invalid='ignore'):
+        nn_ratio = np.where(second_min > 0, min_dist / second_min, 1.0)
+        nn_ratio = np.nan_to_num(nn_ratio, nan=1.0, posinf=1.0, neginf=1.0)
 
-    median_dcr = float(np.median(min_dist))
-    median_nndr = float(np.median(nn_ratio))
+    median_dcr = float(np.median(min_dist)) if len(min_dist) > 0 else 0.0
+    median_nndr = float(np.median(nn_ratio)) if len(nn_ratio) > 0 else 0.0
 
     # Relaxed thresholds for small datasets — strict thresholds are
     # mathematically unreachable with limited feature space and heavy imputation
@@ -118,8 +122,8 @@ def compute_nearest_neighbor_metrics(
         dcr_threshold = 0.05
         nndr_threshold = 0.3
 
-    pass_dcr = median_dcr >= dcr_threshold
-    pass_nndr = median_nndr >= nndr_threshold
+    pass_dcr = median_dcr is not None and median_dcr >= dcr_threshold
+    pass_nndr = median_nndr is not None and median_nndr >= nndr_threshold
 
     return {
         "median_dcr": round(median_dcr, 4),

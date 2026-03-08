@@ -1,78 +1,5 @@
 import { useState, useEffect, useRef } from "react";
-
-// ── Simulated WebSocket stream ────────────────────────────────────────────────
-const PIPELINE_EVENTS = [
-  { type: "agent_start",    agent: "evaluation",  ts: 0 },
-  { type: "agent_data",     agent: "evaluation",  ts: 900,  payload: { phase: "schema",   message: "Schema review complete — 12 columns, 891 rows detected." } },
-  { type: "agent_data",     agent: "evaluation",  ts: 1600, payload: { phase: "quality",  message: "Scoring completeness, uniqueness, balance, distribution, consistency..." } },
-  { type: "agent_data",     agent: "evaluation",  ts: 2200, payload: { phase: "gaps",     message: "Critical gap detected: Cabin column at 77.1% missing (HIGH)." } },
-  { type: "agent_complete", agent: "evaluation",  ts: 2800, payload: {
-    adfi: 0.827, confidence: 0.95,
-    quality_scores: { completeness: 0.838, uniqueness: 1.0, balance: 0.615, distribution_quality: 0.889, consistency: 0.963 },
-    critical_gaps: [
-      { severity: "high",   description: "High missing rate in the Cabin column.",           affected_columns: ["Cabin"] },
-      { severity: "medium", description: "Outlier percentage in the Parch column is high.",  affected_columns: ["Parch"] },
-    ],
-    reasoning_steps: [
-      "Schema review — No issues detected.",
-      "Completeness — 98.4% overall, significant missing in Cabin (77.1%).",
-      "Distribution — Good quality, but Parch has high outlier % (23.9%).",
-      "Consistency — No implausible values detected.",
-      "Balance — Target column 'Survived' score: 0.615.",
-      "Task relevance — Suitable for classification tasks.",
-    ],
-  }},
-
-  { type: "agent_start",    agent: "planner",    ts: 3200 },
-  { type: "agent_data",     agent: "planner",    ts: 4000, payload: { phase: "planning",  message: "Analyzing evaluation output and forming task queue..." } },
-  { type: "agent_data",     agent: "planner",    ts: 4700, payload: { phase: "ordering",  message: "Priority 1: Compliance PII check on Name column." } },
-  { type: "agent_data",     agent: "planner",    ts: 5300, payload: { phase: "ordering",  message: "Priority 2–3: Synthesis imputation and outlier handling." } },
-  { type: "agent_complete", agent: "planner",    ts: 5900, payload: {
-    objective: "Prepare dataset for binary classification on passenger survival",
-    target_column: "Survived", risk_tolerance: "medium", adfi_baseline: 0.827,
-    tasks: [
-      { agent: "compliance", task: "Flag and assess PII in Name column",           priority: 1 },
-      { agent: "synthesis",  task: "Impute missing values in Cabin column",        priority: 2 },
-      { agent: "synthesis",  task: "Handle outliers in Parch column",              priority: 3 },
-      { agent: "validation", task: "Verify improvements in dataset quality",       priority: 4 },
-    ],
-    constraints: ["Address missing values in Cabin", "Handle outliers in Parch", "Ensure compliance with data protection regulations"],
-  }},
-
-  { type: "agent_start",    agent: "compliance", ts: 6300 },
-  { type: "agent_data",     agent: "compliance", ts: 7000, payload: { phase: "scanning",  message: "Scanning all 12 columns for PII patterns..." } },
-  { type: "agent_data",     agent: "compliance", ts: 7700, payload: { phase: "pii",       message: "FOUND: 'Name' column — direct_identifier, confidence 100%." } },
-  { type: "agent_data",     agent: "compliance", ts: 8300, payload: { phase: "regulatory",message: "Mapping findings to GDPR, CCPA, HIPAA exposure levels..." } },
-  { type: "agent_complete", agent: "compliance", ts: 9000, payload: {
-    privacy_risk_score: 0.3, confidence: 0.95, blocked_columns: ["Name"],
-    pii_findings: [{ column: "Name", pii_type: "direct_identifier", confidence: 1, severity: "high" }],
-    regulatory_exposure: { GDPR: "high", CCPA: "high", HIPAA: "none" },
-    re_identification_risk: { score: 0.2, contributing_columns: ["Age", "Sex", "Pclass", "SibSp", "Parch"] },
-    recommended_actions: [{ column: "Name", action: "extract_then_drop", extraction_detail: "Extract title → Name_title, then drop Name." }],
-  }},
-
-  { type: "agent_start",    agent: "synthesis",  ts: 9400 },
-  { type: "agent_data",     agent: "synthesis",  ts: 10100, payload: { phase: "strategy",   message: "Selecting synthesis strategy — SDV GaussianCopula chosen." } },
-  { type: "agent_data",     agent: "synthesis",  ts: 10800, payload: { phase: "attempt",    message: "Attempt 1/3 — budget=600 rows. Running synthesis..." } },
-  { type: "agent_data",     agent: "synthesis",  ts: 11700, payload: { phase: "check",      message: "Attempt 1 — Privacy: PASS · Correlation: FAIL. Reducing budget." } },
-  { type: "agent_data",     agent: "synthesis",  ts: 12400, payload: { phase: "attempt",    message: "Attempt 2/3 — budget=420 rows. Re-running synthesis..." } },
-  { type: "agent_data",     agent: "synthesis",  ts: 13300, payload: { phase: "check",      message: "Attempt 2 — Privacy: PASS · Correlation: PASS. All checks passed." } },
-  { type: "agent_complete", agent: "synthesis",  ts: 14000, payload: {
-    status: "success", attempt: 2, strategy: "SDV_GaussianCopula",
-    rows_before: 891, rows_generated: 420, rows_after: 1311,
-    imputation: [
-      { column: "Age",      action: "median_imputed",        value: "28",  null_rate_before: "19.9%" },
-      { column: "Cabin",    action: "dropped",               value: "—",   reason: "77.1% missing" },
-      { column: "Embarked", action: "mode_imputed",          value: '"S"', null_rate_before: "0.2%" },
-    ],
-    correlation_drift: { max_pair_difference: 0.1663, frobenius_norm: 0.3611, mean_column_drift: 0.1126 },
-    per_col_drift: { Survived: 0.0426, Pclass: 0.0968, Age: 0.1663, SibSp: 0.1663, Parch: 0.1214, Fare: 0.0823 },
-    trace_attempts: [
-      { attempt: 1, budget: 600, privacy: "pass", correlation: "fail" },
-      { attempt: 2, budget: 420, privacy: "pass", correlation: "pass" },
-    ],
-  }},
-];
+import { io, Socket } from "socket.io-client";
 
 // ── Design tokens (reused everywhere) ────────────────────────────────────────
 const AGENT_META = {
@@ -203,12 +130,6 @@ function EvaluationResult({ payload }) {
   return (
     <div>
       <div style={{ display: "flex", gap: 8, marginBottom: 12 }}>
-        {[["ADFI", payload.adfi.toFixed(3)], ["Confidence", `${(payload.confidence * 100).toFixed(0)}%`], ["Rows", "891"], ["Cols", "12"]].map(([l, v]) => (
-          <div key={l} style={{ flex: 1, background: "#F6F8FA", border: "1px solid #E1E4E8", borderRadius: 8, padding: "7px 5px", textAlign: "center" }}>
-            <div style={{ fontSize: 13, fontFamily: "IBM Plex Mono, monospace", fontWeight: 700, color: "#0D1117", lineHeight: 1 }}>{v}</div>
-            <div style={{ fontSize: 9, color: "#8B949E", fontFamily: "IBM Plex Mono, monospace", marginTop: 3, textTransform: "uppercase", letterSpacing: "0.06em" }}>{l}</div>
-          </div>
-        ))}
       </div>
       <SectionHead>Quality Scores</SectionHead>
       {Object.entries(payload.quality_scores).map(([k, v]) => (
@@ -227,13 +148,6 @@ function EvaluationResult({ payload }) {
           </div>
         </div>
       ))}
-      <SectionHead>Reasoning</SectionHead>
-      {payload.reasoning_steps.map((s, i) => (
-        <div key={i} style={{ display: "flex", gap: 8, padding: "3.5px 0", borderBottom: i < payload.reasoning_steps.length - 1 ? "1px solid #F6F8FA" : "none" }}>
-          <span style={{ fontSize: 10, fontFamily: "IBM Plex Mono, monospace", color: "#B1BAC4", marginTop: 1, flexShrink: 0 }}>{String(i + 1).padStart(2, "0")}</span>
-          <span style={{ fontSize: 11, color: "#57606A", fontFamily: "IBM Plex Sans, sans-serif", lineHeight: 1.5 }}>{s}</span>
-        </div>
-      ))}
     </div>
   );
 }
@@ -241,25 +155,42 @@ function EvaluationResult({ payload }) {
 function PlannerResult({ payload }) {
   const agentColor = { compliance: "#7C3AED", synthesis: "#0969DA", validation: "#047857" };
   const agentBg    = { compliance: "#F5F3FF", synthesis: "#EFF6FF", validation: "#ECFDF5" };
+  const tasks = payload?.tasks ?? payload?.ordered_tasks ?? [];
+  const constraints = payload?.constraints ?? [];
+  const adfiBaseline =
+    payload?.adfi_baseline ?? payload?.adfi_baseline_estimate?.overall ?? "N/A";
+
   return (
     <div>
-      <Row label="Target"><Tag color="#0969DA" bg="#EFF6FF" border="#DBEAFE">{payload.target_column}</Tag></Row>
-      <Row label="Risk Tolerance"><StatusPill status={payload.risk_tolerance} /></Row>
-      <Row label="ADFI Baseline">{payload.adfi_baseline}</Row>
+      <Row label="Target"><Tag color="#0969DA" bg="#EFF6FF" border="#DBEAFE">{payload?.target_column ?? "N/A"}</Tag></Row>
+      <Row label="Risk Tolerance"><StatusPill status={payload?.risk_tolerance ?? "none"} /></Row>
+      <Row label="ADFI Baseline">{typeof adfiBaseline === "number" ? adfiBaseline.toFixed(3) : String(adfiBaseline)}</Row>
       <SectionHead>Task Queue</SectionHead>
-      {payload.tasks.map((t, i) => (
-        <div key={i} style={{ display: "flex", alignItems: "flex-start", gap: 9, padding: "7px 0", borderBottom: i < payload.tasks.length - 1 ? "1px solid #F6F8FA" : "none" }}>
-          <div style={{ width: 20, height: 20, borderRadius: 6, flexShrink: 0, background: agentBg[t.agent] || "#F6F8FA", border: `1px solid ${agentColor[t.agent]}33`, display: "flex", alignItems: "center", justifyContent: "center" }}>
-            <span style={{ fontSize: 9.5, fontFamily: "IBM Plex Mono, monospace", fontWeight: 700, color: agentColor[t.agent] || "#57606A" }}>{t.priority}</span>
+      {tasks.map((t, i) => (
+        <div key={i} style={{ display: "flex", alignItems: "flex-start", gap: 9, padding: "7px 0", borderBottom: i < tasks.length - 1 ? "1px solid #F6F8FA" : "none", opacity: t.skip ? 0.5 : 1 }}>
+          <div style={{ width: 20, height: 20, borderRadius: 6, flexShrink: 0, background: t.skip ? "#F6F8FA" : (agentBg[t.agent] || "#F6F8FA"), border: `1px solid ${t.skip ? "#E1E4E8" : `${agentColor[t.agent]}33`}`, display: "flex", alignItems: "center", justifyContent: "center" }}>
+            {t.skip ? (
+              <span style={{ fontSize: 10, color: "#8B949E" }}>—</span>
+            ) : (
+              <span style={{ fontSize: 9.5, fontFamily: "IBM Plex Mono, monospace", fontWeight: 700, color: agentColor[t.agent] || "#57606A" }}>{t.priority}</span>
+            )}
           </div>
           <div style={{ flex: 1 }}>
-            <div style={{ fontSize: 11.5, color: "#24292F", fontFamily: "IBM Plex Sans, sans-serif", lineHeight: 1.4 }}>{t.task}</div>
-            <span style={{ fontSize: 10, fontFamily: "IBM Plex Mono, monospace", fontWeight: 600, color: agentColor[t.agent] || "#57606A", textTransform: "uppercase", letterSpacing: "0.05em" }}>{t.agent}</span>
+            <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 2 }}>
+              <span style={{ fontSize: 10, fontFamily: "IBM Plex Mono, monospace", fontWeight: 600, color: t.skip ? "#8B949E" : (agentColor[t.agent] || "#57606A"), textTransform: "uppercase", letterSpacing: "0.05em" }}>{t.agent}</span>
+              {t.skip && (
+                <span style={{ fontSize: 9, fontFamily: "IBM Plex Mono, monospace", fontWeight: 600, color: "#8B949E", background: "#F6F8FA", border: "1px solid #E1E4E8", borderRadius: 4, padding: "1px 5px" }}>SKIPPED</span>
+              )}
+            </div>
+            <div style={{ fontSize: 11.5, color: t.skip ? "#8B949E" : "#24292F", fontFamily: "IBM Plex Sans, sans-serif", lineHeight: 1.4 }}>{t.task}</div>
+            {t.reason && (
+              <div style={{ fontSize: 10.5, color: "#8B949E", fontFamily: "IBM Plex Sans, sans-serif", marginTop: 3, fontStyle: "italic" }}>{t.reason}</div>
+            )}
           </div>
         </div>
       ))}
       <SectionHead>Constraints</SectionHead>
-      {payload.constraints.map((c, i) => (
+      {constraints.map((c, i) => (
         <div key={i} style={{ display: "flex", gap: 7, alignItems: "flex-start", padding: "3px 0" }}>
           <div style={{ width: 4, height: 4, borderRadius: 99, background: "#D0D7DE", marginTop: 5, flexShrink: 0 }} />
           <span style={{ fontSize: 11, color: "#57606A", fontFamily: "IBM Plex Sans, sans-serif", lineHeight: 1.5 }}>{c}</span>
@@ -273,104 +204,524 @@ function ComplianceResult({ payload }) {
   const regColor = { high: "#DC2626", medium: "#B45309", low: "#047857", none: "#8B949E" };
   const regBg    = { high: "#FEF2F2", medium: "#FFFBEB", low: "#ECFDF5", none: "#F6F8FA" };
   const regBdr   = { high: "#FEE2E2", medium: "#FEF3C7", low: "#D1FAE5", none: "#E1E4E8" };
+  
+  // Handle skipped compliance
+  if (payload?.status === "skipped") {
+    return (
+      <div>
+        <div style={{ padding: "20px", textAlign: "center", background: "#F6F8FA", border: "1px solid #E1E4E8", borderRadius: 8 }}>
+          <div style={{ fontSize: 13, fontWeight: 600, color: "#24292F", marginBottom: 4 }}>Compliance Check Skipped</div>
+          <div style={{ fontSize: 11, color: "#8B949E", fontFamily: "IBM Plex Sans, sans-serif" }}>
+            {payload.reason || "No PII risk detected by planner"}
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // Helper to parse blocked columns (may be string array or comma-separated string)
+  const getBlockedColumns = () => {
+    if (!payload?.blocked_columns) return [];
+    if (Array.isArray(payload.blocked_columns)) {
+      return payload.blocked_columns.filter(col => typeof col === 'string' && col.trim().length > 0);
+    }
+    if (typeof payload.blocked_columns === 'string') {
+      return payload.blocked_columns.split(',').map(c => c.trim()).filter(c => c.length > 0);
+    }
+    return [];
+  };
+
+  // Helper to parse PII findings
+  const getPIIFindings = () => {
+    if (!payload?.pii_findings) return [];
+    if (Array.isArray(payload.pii_findings)) {
+      return payload.pii_findings.filter(f => typeof f === 'object' && f !== null && f.column);
+    }
+    return [];
+  };
+
+  // Helper to parse recommended actions
+  const getRecommendedActions = () => {
+    if (!payload?.recommended_actions) return [];
+    if (Array.isArray(payload.recommended_actions)) {
+      return payload.recommended_actions.filter(a => typeof a === 'object' && a !== null && a.column);
+    }
+    return [];
+  };
+
+  const blockedCols = getBlockedColumns();
+  const piiFindings = getPIIFindings();
+  const actions = getRecommendedActions();
+  
   return (
     <div>
-      <Row label="Privacy Risk Score"><span style={{ color: "#B45309", fontWeight: 700 }}>{payload.privacy_risk_score.toFixed(2)} / 1.00</span></Row>
-      <Row label="Confidence">{(payload.confidence * 100).toFixed(0)}%</Row>
-      <Row label="Blocked"><Tag color="#DC2626" bg="#FEF2F2" border="#FEE2E2">{payload.blocked_columns[0]}</Tag></Row>
+      <Row label="Privacy Risk Score"><span style={{ color: "#B45309", fontWeight: 700 }}>{payload?.privacy_risk_score?.toFixed(2) ?? "N/A"} / 1.00</span></Row>
+      <Row label="Confidence">{payload?.confidence ? (payload.confidence * 100).toFixed(0) : "N/A"}%</Row>
+      <Row label="Blocked">
+        {blockedCols.length > 0 ? (
+          <div style={{ display: "flex", gap: 4, flexWrap: "wrap", justifyContent: "flex-end" }}>
+            {blockedCols.slice(0, 2).map((col, i) => (
+              <Tag key={i} color="#DC2626" bg="#FEF2F2" border="#FEE2E2">{col}</Tag>
+            ))}
+            {blockedCols.length > 2 && <span style={{ fontSize: 11, color: "#8B949E" }}>+{blockedCols.length - 2} more</span>}
+          </div>
+        ) : (
+          <span style={{ fontSize: 11, color: "#8B949E" }}>None</span>
+        )}
+      </Row>
       <SectionHead>PII Finding</SectionHead>
-      {payload.pii_findings.map((f, i) => (
-        <div key={i} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", background: "#FEF2F2", border: "1px solid #FEE2E2", borderRadius: 8, padding: "8px 10px", gap: 8 }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 7 }}>
-            <svg width="12" height="12" viewBox="0 0 24 24" fill="none"><path d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" stroke="#DC2626" strokeWidth="2" strokeLinecap="round"/></svg>
-            <div>
-              <div style={{ fontSize: 12, fontFamily: "IBM Plex Mono, monospace", fontWeight: 700, color: "#DC2626" }}>{f.column}</div>
-              <div style={{ fontSize: 10, color: "#B91C1C", fontFamily: "IBM Plex Mono, monospace" }}>{f.pii_type.replace(/_/g, " ")}</div>
+      {piiFindings.length > 0 ? (
+        piiFindings.map((f, i) => (
+          <div key={i} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", background: "#FEF2F2", border: "1px solid #FEE2E2", borderRadius: 8, padding: "8px 10px", gap: 8, marginBottom: 6 }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 7, flex: 1, minWidth: 0 }}>
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" style={{ flexShrink: 0 }}><path d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" stroke="#DC2626" strokeWidth="2" strokeLinecap="round"/></svg>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontSize: 12, fontFamily: "IBM Plex Mono, monospace", fontWeight: 700, color: "#DC2626", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{f.column}</div>
+                <div style={{ fontSize: 10, color: "#B91C1C", fontFamily: "IBM Plex Mono, monospace", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{typeof f.pii_type === 'string' ? f.pii_type.replace(/_/g, " ") : "direct identifier"}</div>
+              </div>
+            </div>
+            <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 3, flexShrink: 0 }}>
+              <StatusPill status={f.severity || "high"} />
+              <span style={{ fontSize: 10, color: "#B91C1C", fontFamily: "IBM Plex Mono, monospace" }}>conf. {(typeof f.confidence === 'number' ? f.confidence * 100 : 100).toFixed(0)}%</span>
             </div>
           </div>
-          <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 3 }}>
-            <StatusPill status={f.severity} />
-            <span style={{ fontSize: 10, color: "#B91C1C", fontFamily: "IBM Plex Mono, monospace" }}>conf. {(f.confidence * 100).toFixed(0)}%</span>
-          </div>
-        </div>
-      ))}
+        ))
+      ) : (
+        <div style={{ fontSize: 11, color: "#8B949E", padding: "8px 0", fontStyle: "italic" }}>No PII findings</div>
+      )}
       <SectionHead>Regulatory Exposure</SectionHead>
-      <div style={{ display: "flex", gap: 6 }}>
-        {Object.entries(payload.regulatory_exposure).map(([reg, level]) => (
-          <div key={reg} style={{ flex: 1, textAlign: "center", background: regBg[level], border: `1px solid ${regBdr[level]}`, borderRadius: 8, padding: "7px 4px" }}>
-            <div style={{ fontSize: 11, fontFamily: "IBM Plex Mono, monospace", fontWeight: 700, color: regColor[level] }}>{level.toUpperCase()}</div>
-            <div style={{ fontSize: 9.5, color: "#8B949E", fontFamily: "IBM Plex Mono, monospace", marginTop: 2, textTransform: "uppercase", letterSpacing: "0.05em" }}>{reg}</div>
-          </div>
-        ))}
-      </div>
+      {payload?.regulatory_exposure && typeof payload.regulatory_exposure === 'object' ? (
+        <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+          {Object.entries(payload.regulatory_exposure).map(([reg, level]: [string, any]) => (
+            <div key={reg} style={{ flex: "1 1 auto", minWidth: 80, textAlign: "center", background: regBg[level?.toLowerCase?.() || "none"], border: `1px solid ${regBdr[level?.toLowerCase?.() || "none"]}`, borderRadius: 8, padding: "7px 4px" }}>
+              <div style={{ fontSize: 11, fontFamily: "IBM Plex Mono, monospace", fontWeight: 700, color: regColor[level?.toLowerCase?.() || "none"] }}>{typeof level === 'string' ? level.toUpperCase() : "NONE"}</div>
+              <div style={{ fontSize: 9.5, color: "#8B949E", fontFamily: "IBM Plex Mono, monospace", marginTop: 2, textTransform: "uppercase", letterSpacing: "0.05em" }}>{reg}</div>
+            </div>
+          ))}
+        </div>
+      ) : (
+        <div style={{ fontSize: 11, color: "#8B949E", padding: "8px 0", fontStyle: "italic" }}>No regulatory data available</div>
+      )}
       <SectionHead>Re-id Risk</SectionHead>
-      <div style={{ background: "#FFFBEB", border: "1px solid #FEF3C7", borderRadius: 8, padding: "9px 11px" }}>
-        <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 6 }}>
-          <span style={{ fontSize: 11, color: "#B45309" }}>Score</span>
-          <span style={{ fontSize: 12, fontFamily: "IBM Plex Mono, monospace", fontWeight: 700, color: "#B45309" }}>{payload.re_identification_risk.score.toFixed(1)}</span>
-        </div>
-        <div style={{ display: "flex", flexWrap: "wrap", gap: 4 }}>
-          {payload.re_identification_risk.contributing_columns.map(c => <Tag key={c} color="#B45309" bg="#FEF9C3" border="#FEF3C7">{c}</Tag>)}
-        </div>
-      </div>
-      <SectionHead>Action</SectionHead>
-      {payload.recommended_actions.map((a, i) => (
-        <div key={i} style={{ background: "#F0FDF4", border: "1px solid #D1FAE5", borderRadius: 8, padding: "9px 11px" }}>
-          <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 4 }}>
-            <Tag color="#047857" bg="#DCFCE7" border="#D1FAE5">{a.column}</Tag>
-            <Tag color="#0969DA" bg="#EFF6FF" border="#DBEAFE">{a.action.replace(/_/g, " ")}</Tag>
+      {payload?.re_identification_risk && typeof payload.re_identification_risk === 'object' ? (
+        <div style={{ background: "#FFFBEB", border: "1px solid #FEF3C7", borderRadius: 8, padding: "9px 11px" }}>
+          <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 6 }}>
+            <span style={{ fontSize: 11, color: "#B45309" }}>Score</span>
+            <span style={{ fontSize: 12, fontFamily: "IBM Plex Mono, monospace", fontWeight: 700, color: "#B45309" }}>{typeof payload.re_identification_risk.score === 'number' ? payload.re_identification_risk.score.toFixed(1) : "N/A"}</span>
           </div>
-          <div style={{ fontSize: 11, color: "#166534", fontFamily: "IBM Plex Sans, sans-serif", lineHeight: 1.4 }}>{a.extraction_detail}</div>
+          {payload.re_identification_risk.contributing_columns && Array.isArray(payload.re_identification_risk.contributing_columns) && payload.re_identification_risk.contributing_columns.length > 0 && (
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 4 }}>
+              {payload.re_identification_risk.contributing_columns
+                .filter(c => typeof c === 'string' && c.trim().length > 0)
+                .map(c => <Tag key={c} color="#B45309" bg="#FEF9C3" border="#FEF3C7">{c}</Tag>)
+              }
+            </div>
+          )}
         </div>
-      ))}
+      ) : (
+        <div style={{ fontSize: 11, color: "#8B949E", padding: "8px 0", fontStyle: "italic" }}>No re-identification risk data</div>
+      )}
+      <SectionHead>Action</SectionHead>
+      {actions.length > 0 ? (
+        actions.map((a, i) => (
+          <div key={i} style={{ background: "#F0FDF4", border: "1px solid #D1FAE5", borderRadius: 8, padding: "9px 11px", marginBottom: 6 }}>
+            <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 4, gap: 8, flexWrap: "wrap" }}>
+              <Tag color="#047857" bg="#DCFCE7" border="#D1FAE5">{a.column}</Tag>
+              <Tag color="#0969DA" bg="#EFF6FF" border="#DBEAFE">{typeof a.action === 'string' ? a.action.replace(/_/g, " ") : "extract"}</Tag>
+            </div>
+            <div style={{ fontSize: 11, color: "#166534", fontFamily: "IBM Plex Sans, sans-serif", lineHeight: 1.4, overflow: "hidden", textOverflow: "ellipsis" }}>{a.extraction_detail || a.action}</div>
+          </div>
+        ))
+      ) : (
+        <div style={{ fontSize: 11, color: "#8B949E", padding: "8px 0", fontStyle: "italic" }}>No recommended actions</div>
+      )}
     </div>
   );
 }
 
-function SynthesisResult({ payload }) {
+function SynthesisResult({ payload, datasetId, runId, onAnalysisSaved }) {
+  const [generating, setGenerating] = useState(false);
+  const [generatedFile, setGeneratedFile] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [isFallbackDownload, setIsFallbackDownload] = useState(false);
+  const [resultMessage, setResultMessage] = useState<string | null>(null);
+
+  // Synthesis may arrive either as direct payload or nested under `result`.
+  const synthesisPayload = payload?.result && typeof payload.result === 'object' ? payload.result : payload;
+  const synthesisReport = synthesisPayload?.synthesis_report && typeof synthesisPayload.synthesis_report === 'object'
+    ? synthesisPayload.synthesis_report
+    : null;
+  const strategyUsed = synthesisPayload?.strategy_used && typeof synthesisPayload.strategy_used === 'object'
+    ? synthesisPayload.strategy_used
+    : null;
+  const correlationDrift = synthesisPayload?.correlation_drift
+    ?? synthesisPayload?.correlation_report?.drift_metrics
+    ?? null;
+  const traceAttempts = Array.isArray(synthesisPayload?.trace_attempts) ? synthesisPayload.trace_attempts : [];
+
+  const rowsBefore = typeof synthesisReport?.rows_before === 'number' ? synthesisReport.rows_before : null;
+  const rowsGenerated = typeof synthesisReport?.rows_generated === 'number'
+    ? synthesisReport.rows_generated
+    : (typeof strategyUsed?.augmentation_budget === 'number' ? strategyUsed.augmentation_budget : null);
+  const rowsAfter = typeof synthesisReport?.rows_after === 'number' ? synthesisReport.rows_after : null;
+
+  const currentAttempt = typeof synthesisPayload?.attempt === 'number' ? synthesisPayload.attempt : null;
+  const maxAttempts = typeof synthesisPayload?.max_attempts === 'number'
+    ? synthesisPayload.max_attempts
+    : (traceAttempts.length > 0 ? traceAttempts.length : null);
+
+  const strategyLabel = typeof synthesisReport?.strategy === 'string'
+    ? synthesisReport.strategy.replace(/_/g, ' ')
+    : (typeof strategyUsed?.fallback_strategy === 'string' ? strategyUsed.fallback_strategy : 'N/A');
+
+  const meanColumnDrift = typeof correlationDrift?.mean_column_drift === 'number'
+    ? correlationDrift.mean_column_drift
+    : (typeof correlationDrift?.mean_column_max_drift === 'number' ? correlationDrift.mean_column_max_drift : null);
+
+  const formatCount = (value, prefix = '') => (typeof value === 'number' ? `${prefix}${value.toLocaleString()}` : 'N/A');
+  const summaryCards: Array<[string, string]> = [
+    ['Before', formatCount(rowsBefore)],
+    ['Generated', formatCount(rowsGenerated, '+')],
+    ['After', formatCount(rowsAfter)],
+    ['Attempt', currentAttempt !== null ? `${currentAttempt}${maxAttempts ? `/${maxAttempts}` : ''}` : 'N/A'],
+  ];
+  
   const driftColor = v => v < 0.10 ? "#34D399" : v < 0.15 ? "#FBBF24" : "#F87171";
+  
+  // Handle synthesis failed/skipped
+  if (synthesisPayload?.status === "synthesis_failed" || synthesisPayload?.status === "fallback") {
+    return (
+      <div>
+        <div style={{ padding: "20px", textAlign: "center", background: "#ECFDF5", border: "1px solid #D1FAE5", borderRadius: 8 }}>
+          <div style={{ fontSize: 13, fontWeight: 600, color: "#047857", marginBottom: 4 }}>Synthesis Skipped</div>
+          <div style={{ fontSize: 11, color: "#16A34A", fontFamily: "IBM Plex Sans, sans-serif", marginBottom: 8 }}>
+            {synthesisPayload?.warning || "Dataset already balanced or synthesis not needed"}
+          </div>
+          {synthesisPayload?.trace && Array.isArray(synthesisPayload.trace) && synthesisPayload.trace.length > 0 && (
+            <div style={{ fontSize: 10, color: "#8B949E", fontFamily: "IBM Plex Mono, monospace", background: "#F6F8FA", border: "1px solid #E1E4E8", borderRadius: 6, padding: "8px", textAlign: "left", maxHeight: 100, overflowY: "auto" }}>
+              {synthesisPayload.trace.map((line, i) => <div key={i}>{line}</div>)}
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  }
+  
+  const handleGenerateSynthetic = async () => {
+    if (!datasetId || !runId) {
+      setError('Missing dataset or run information');
+      return;
+    }
+    
+    setGenerating(true);
+    setError(null);
+    setResultMessage(null);
+    setIsFallbackDownload(false);
+    
+    try {
+      const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:5000';
+      const response = await fetch(`${API_BASE}/agents/${datasetId}/runs/${runId}/generate-synthetic`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+      });
+      
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        const errorMsg = errorData.message || errorData.detail || `Generation failed (${response.status})`;
+        throw new Error(errorMsg);
+      }
+      
+      const result = await response.json();
+      const syntheticDownloadUrl = typeof result.downloadUrl === 'string' && result.downloadUrl.trim().length > 0
+        ? result.downloadUrl
+        : (typeof result.filePath === 'string' && result.filePath.trim().length > 0 ? result.filePath : null);
+
+      if (!syntheticDownloadUrl) {
+        throw new Error('Synthetic generation succeeded but no download URL was returned');
+      }
+
+      setGeneratedFile(syntheticDownloadUrl);
+      setIsFallbackDownload(Boolean(result.isFallback));
+      if (typeof result.message === 'string' && result.message.trim().length > 0) {
+        setResultMessage(result.message);
+      }
+      if (result.isFallback && typeof result.failureReason === 'string' && result.failureReason.trim().length > 0) {
+        setError(result.failureReason);
+      }
+      
+      // Save analysis to database after successful generation
+      if (onAnalysisSaved) {
+        try {
+          await fetch(`${API_BASE}/agents/${datasetId}/runs/${runId}/save-analysis`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              evaluation: synthesisPayload,
+              synthesis: synthesisPayload,
+              syntheticDataS3Key: result.syntheticDataS3Key,
+              generatedAt: new Date().toISOString(),
+            }),
+          });
+          
+          if (onAnalysisSaved) {
+            onAnalysisSaved({
+              synthesis: synthesisPayload,
+              syntheticDataS3Key: result.syntheticDataS3Key,
+            });
+          }
+        } catch (err) {
+          console.warn('Failed to save analysis:', err);
+        }
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Generation failed');
+    } finally {
+      setGenerating(false);
+    }
+  };
+
+  const generatedFileName = (() => {
+    if (!generatedFile) return 'synthetic_data.csv';
+
+    try {
+      const parsed = new URL(generatedFile);
+      const segments = parsed.pathname.split('/').filter(Boolean);
+      return decodeURIComponent(segments[segments.length - 1] || 'synthetic_data.csv');
+    } catch {
+      const noQuery = generatedFile.split('?')[0];
+      const fallbackName = noQuery.split('/').pop();
+      return fallbackName && fallbackName.length > 0 ? fallbackName : 'synthetic_data.csv';
+    }
+  })();
+  
   return (
     <div>
       <div style={{ display: "flex", gap: 8, marginBottom: 12 }}>
-        {[["Before", "891"], ["Generated", "+420"], ["After", "1,311"], ["Attempt", "2/3"]].map(([l, v]) => (
+        {summaryCards.map(([l, v]) => (
           <div key={l} style={{ flex: 1, background: "#F6F8FA", border: "1px solid #E1E4E8", borderRadius: 8, padding: "7px 5px", textAlign: "center" }}>
             <div style={{ fontSize: 13, fontFamily: "IBM Plex Mono, monospace", fontWeight: 700, color: "#0D1117", lineHeight: 1 }}>{v}</div>
             <div style={{ fontSize: 9, color: "#8B949E", fontFamily: "IBM Plex Mono, monospace", marginTop: 3, textTransform: "uppercase", letterSpacing: "0.06em" }}>{l}</div>
           </div>
         ))}
       </div>
-      <Row label="Strategy"><Tag color="#7C3AED" bg="#F5F3FF" border="#EDE9FE">SDV GaussianCopula</Tag></Row>
+      <Row label="Strategy"><Tag color="#7C3AED" bg="#F5F3FF" border="#EDE9FE">{strategyLabel}</Tag></Row>
       <SectionHead>Imputation</SectionHead>
-      {payload.imputation.map((r, i) => (
-        <div key={i} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "5px 0", borderBottom: "1px solid #F6F8FA", gap: 8 }}>
-          <Tag>{r.column}</Tag>
-          <span style={{ fontSize: 10.5, color: "#8B949E", fontFamily: "IBM Plex Mono, monospace", flex: 1, textAlign: "center" }}>{r.action.replace(/_/g, " ")}</span>
-          <span style={{ fontSize: 11, fontFamily: "IBM Plex Mono, monospace", fontWeight: 600, color: r.action === "dropped" ? "#DC2626" : "#0D1117" }}>{r.value}</span>
-        </div>
-      ))}
+      {synthesisPayload.imputation_report && Object.keys(synthesisPayload.imputation_report).length > 0 ? (
+        Object.entries(synthesisPayload.imputation_report).map(([col, data]: [string, any], i) => (
+          <div key={i} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "5px 0", borderBottom: "1px solid #F6F8FA", gap: 8 }}>
+            <Tag>{col}</Tag>
+            <span style={{ fontSize: 10.5, color: "#8B949E", fontFamily: "IBM Plex Mono, monospace", flex: 1, textAlign: "center" }}>{data.action.replace(/_/g, " ")}</span>
+            <span style={{ fontSize: 11, fontFamily: "IBM Plex Mono, monospace", fontWeight: 600, color: data.action === "dropped" ? "#DC2626" : "#0D1117" }}>
+              {data.value !== undefined ? data.value : (data.reason || '—')}
+            </span>
+          </div>
+        ))
+      ) : (
+        <div style={{ fontSize: 11, color: "#8B949E", padding: "8px 0", fontStyle: "italic" }}>No imputation performed</div>
+      )}
       <SectionHead>Correlation Drift</SectionHead>
-      {[["Max Pair Diff.", payload.correlation_drift.max_pair_difference, 0.20], ["Frobenius Norm", payload.correlation_drift.frobenius_norm, 0.40], ["Mean Col. Drift", payload.correlation_drift.mean_column_drift, 0.20]].map(([l, v, t]) => (
-        <div key={l} style={{ display: "flex", alignItems: "center", gap: 8, padding: "4px 0" }}>
-          <span style={{ fontSize: 10.5, color: "#8B949E", width: 100, flexShrink: 0, fontFamily: "IBM Plex Sans, sans-serif" }}>{l}</span>
-          <div style={{ flex: 1, height: 4, borderRadius: 99, background: "#F0F2F4", overflow: "hidden" }}>
-            <div style={{ width: `${(v / t) * 100}%`, height: "100%", background: driftColor(v), borderRadius: 99 }} />
+      {correlationDrift ? (
+        [
+          ["Max Pair Diff.", correlationDrift.max_pair_difference, 0.20], 
+          ["Frobenius Norm", correlationDrift.frobenius_norm, 0.40], 
+          ["Mean Col. Drift", meanColumnDrift, 0.20]
+        ].filter(([, v]) => typeof v === 'number').map(([l, v, t]) => (
+          <div key={l} style={{ display: "flex", alignItems: "center", gap: 8, padding: "4px 0" }}>
+            <span style={{ fontSize: 10.5, color: "#8B949E", width: 100, flexShrink: 0, fontFamily: "IBM Plex Sans, sans-serif" }}>{l}</span>
+            <div style={{ flex: 1, height: 4, borderRadius: 99, background: "#F0F2F4", overflow: "hidden" }}>
+              <div style={{ width: `${Math.min((v / t) * 100, 100)}%`, height: "100%", background: driftColor(v), borderRadius: 99 }} />
+            </div>
+            <span style={{ fontSize: 11, fontFamily: "IBM Plex Mono, monospace", fontWeight: 600, color: "#24292F", minWidth: 38, textAlign: "right" }}>{v.toFixed(2)}</span>
           </div>
-          <span style={{ fontSize: 11, fontFamily: "IBM Plex Mono, monospace", fontWeight: 600, color: "#24292F", minWidth: 38, textAlign: "right" }}>{v.toFixed(4)}</span>
-        </div>
-      ))}
+        ))
+      ) : (
+        <div style={{ fontSize: 11, color: "#8B949E", padding: "8px 0", fontStyle: "italic" }}>No correlation data available</div>
+      )}
       <SectionHead>Attempt Trace</SectionHead>
-      {payload.trace_attempts.map((t, i) => (
-        <div key={i} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", background: i === 1 ? "#F0FDF4" : "#FEF2F2", border: `1px solid ${i === 1 ? "#D1FAE5" : "#FEE2E2"}`, borderRadius: 7, padding: "6px 10px", marginBottom: 5 }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-            <span style={{ fontSize: 10, fontFamily: "IBM Plex Mono, monospace", fontWeight: 700, color: "#8B949E" }}>#{t.attempt}</span>
-            <span style={{ fontSize: 11, fontFamily: "IBM Plex Mono, monospace", color: "#57606A" }}>budget={t.budget}</span>
+      {traceAttempts.length > 0 ? (
+        traceAttempts.map((t, i) => (
+          <div key={i} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", background: i === 1 ? "#F0FDF4" : "#FEF2F2", border: `1px solid ${i === 1 ? "#D1FAE5" : "#FEE2E2"}`, borderRadius: 7, padding: "6px 10px", marginBottom: 5 }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+              <span style={{ fontSize: 10, fontFamily: "IBM Plex Mono, monospace", fontWeight: 700, color: "#8B949E" }}>#{t.attempt}</span>
+              <span style={{ fontSize: 11, fontFamily: "IBM Plex Mono, monospace", color: "#57606A" }}>budget={t.budget}</span>
+            </div>
+            <div style={{ display: "flex", gap: 5 }}>
+              <StatusPill status={t.privacy} />
+              <StatusPill status={t.correlation} />
+            </div>
           </div>
-          <div style={{ display: "flex", gap: 5 }}>
-            <StatusPill status={t.privacy} />
-            <StatusPill status={t.correlation} />
+        ))
+      ) : (
+        <div style={{ fontSize: 11, color: "#8B949E", padding: "8px 0", fontStyle: "italic" }}>No attempt trace available</div>
+      )}
+      
+      {/* Generate Synthetic Data Button */}
+      <div style={{ marginTop: 16, paddingTop: 16, borderTop: "1px solid #E1E4E8" }}>
+        {error && (
+          <div style={{
+            padding: "12px 14px",
+            background: "#FEF2F2",
+            border: "1px solid #FEE2E2",
+            borderRadius: 8,
+            marginBottom: 12,
+            display: "flex",
+            alignItems: "flex-start",
+            gap: 10,
+          }}>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" style={{ marginTop: 1, flexShrink: 0 }}>
+              <path d="M12 9v4m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" stroke="#DC2626" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+            </svg>
+            <div style={{ flex: 1 }}>
+              <div style={{ fontSize: 12, color: "#DC2626", fontWeight: 600, fontFamily: "IBM Plex Sans, sans-serif", marginBottom: 2 }}>Error</div>
+              <div style={{ fontSize: 11, color: "#B91C1C", fontFamily: "IBM Plex Mono, monospace", lineHeight: 1.4 }}>{error}</div>
+            </div>
+            <button
+              onClick={() => setError(null)}
+              style={{
+                background: "transparent",
+                border: "none",
+                color: "#DC2626",
+                cursor: "pointer",
+                padding: 0,
+                fontSize: 16,
+                flexShrink: 0,
+              }}
+            >
+              ×
+            </button>
           </div>
-        </div>
-      ))}
+        )}
+        
+        {!generating && !generatedFile && (
+          <button
+            onClick={handleGenerateSynthetic}
+            style={{
+              width: "100%",
+              padding: "10px 16px",
+              background: "#0969DA",
+              color: "white",
+              border: "none",
+              borderRadius: 8,
+              fontSize: 13,
+              fontWeight: 600,
+              cursor: "pointer",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              gap: 8,
+              fontFamily: "IBM Plex Sans, sans-serif",
+            }}
+          >
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+              <polyline points="7 10 12 15 17 10" />
+              <line x1="12" y1="15" x2="12" y2="3" />
+            </svg>
+            Generate Synthetic Data
+          </button>
+        )}
+        
+        {generating && (
+          <div style={{
+            padding: "16px",
+            background: "#F6F8FA",
+            border: "1px solid #E1E4E8",
+            borderRadius: 8,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            gap: 10,
+          }}>
+            <div style={{
+              width: 16,
+              height: 16,
+              border: "2px solid #E1E4E8",
+              borderTop: "2px solid #0969DA",
+              borderRadius: "50%",
+              animation: "spin 0.8s linear infinite",
+            }} />
+            <span style={{ fontSize: 13, color: "#57606A", fontFamily: "IBM Plex Sans, sans-serif" }}>
+              Generating synthetic data...
+            </span>
+          </div>
+        )}
+        
+        {generatedFile && (
+          <div style={{
+            padding: "12px 14px",
+            background: isFallbackDownload ? "#FFFBEB" : "#F0FDF4",
+            border: isFallbackDownload ? "1px solid #FDE68A" : "1px solid #D1FAE5",
+            borderRadius: 8,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+          }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke={isFallbackDownload ? "#B45309" : "#047857"} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M13 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z" />
+                <polyline points="13 2 13 9 20 9" />
+              </svg>
+              <div>
+                <div style={{ fontSize: 12, fontWeight: 600, color: isFallbackDownload ? "#B45309" : "#047857", fontFamily: "IBM Plex Sans, sans-serif" }}>
+                  {isFallbackDownload ? "Original Dataset Returned" : "Synthetic Data Generated"}
+                </div>
+                <div style={{ fontSize: 10, color: "#166534", fontFamily: "IBM Plex Mono, monospace", marginTop: 2 }}>
+                  {generatedFileName}
+                </div>
+                {resultMessage && (
+                  <div style={{ fontSize: 10, color: isFallbackDownload ? "#92400E" : "#166534", fontFamily: "IBM Plex Sans, sans-serif", marginTop: 4 }}>
+                    {resultMessage}
+                  </div>
+                )}
+              </div>
+            </div>
+            <a
+              href={generatedFile}
+              download={generatedFileName}
+              style={{
+                padding: "6px 12px",
+                background: isFallbackDownload ? "#B45309" : "#047857",
+                color: "white",
+                border: "none",
+                borderRadius: 6,
+                fontSize: 11,
+                fontWeight: 600,
+                textDecoration: "none",
+                fontFamily: "IBM Plex Sans, sans-serif",
+                display: "flex",
+                alignItems: "center",
+                gap: 6,
+              }}
+            >
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M3 15v4c0 1.1.9 2 2 2h14a2 2 0 0 0 2-2v-4M17 9l-5 5-5-5M12 12.8V2.5"/>
+              </svg>
+              Download CSV
+            </a>
+          </div>
+        )}
+        
+        {error && (
+          <div style={{
+            padding: "12px 14px",
+            background: "#FEF2F2",
+            border: "1px solid #FEE2E2",
+            borderRadius: 8,
+            fontSize: 12,
+            color: "#DC2626",
+            fontFamily: "IBM Plex Sans, sans-serif",
+          }}>
+            {error}
+          </div>
+        )}
+      </div>
+      
+      <style jsx>{`
+        @keyframes spin {
+          from { transform: rotate(0deg); }
+          to { transform: rotate(360deg); }
+        }
+      `}</style>
     </div>
   );
 }
@@ -392,7 +743,7 @@ function Arrow({ from }) {
 }
 
 // ── Agent block ───────────────────────────────────────────────────────────────
-function AgentBlock({ agentKey, agentState }) {
+function AgentBlock({ agentKey, agentState, datasetId, runId, onAnalysisSaved }) {
   const { status, logs, result } = agentState;
   const ResultRenderer = RESULT_RENDERERS[agentKey];
   const isQueued = status === "queued";
@@ -428,7 +779,7 @@ function AgentBlock({ agentKey, agentState }) {
               <svg width="11" height="11" viewBox="0 0 24 24" fill="none"><path d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" stroke="#34D399" strokeWidth="2" strokeLinecap="round"/></svg>
               <span style={{ fontSize: 10, fontFamily: "IBM Plex Mono, monospace", fontWeight: 700, color: "#047857", textTransform: "uppercase", letterSpacing: "0.08em" }}>Agent Output</span>
             </div>
-            <ResultRenderer payload={result} />
+            <ResultRenderer payload={result} datasetId={datasetId} runId={runId} onAnalysisSaved={onAnalysisSaved} />
           </div>
         )}
       </div>
@@ -437,48 +788,261 @@ function AgentBlock({ agentKey, agentState }) {
 }
 
 // ── Main ──────────────────────────────────────────────────────────────────────
-export default function PipelineLog() {
+interface AgentAnalysisProps {
+  dataset: {
+    id: string;
+    name: string;
+    status: string;
+    rowCount: number | null;
+    columnCount: number | null;
+  } | null;
+  currentRun: {
+    id: string;
+    status: string;
+    adfiScore: number | null;
+    complianceStatus: string | null;
+    task: string | null;
+    createdAt: string;
+    result?: Record<string, unknown> | null;
+    errorMsg?: string | null;
+  } | null;
+  onRunCreated?: (run: {
+    id: string;
+    status: string;
+    datasetId?: string;
+  }) => void;
+}
+
+interface AgentEvent {
+  type: "agent_start" | "agent_data" | "agent_complete";
+  agent: string;
+  payload?: {
+    phase?: string;
+    message?: string;
+    [key: string]: unknown;
+  };
+}
+
+export default function PipelineLog({ dataset, currentRun, onRunCreated }: AgentAnalysisProps) {
   const [agents, setAgents] = useState(() =>
     Object.fromEntries(AGENT_ORDER.map(k => [k, { status: "queued", logs: [], result: null }]))
   );
   const [started, setStarted] = useState(false);
-  const [done, setDone]       = useState(false);
+  const [done, setDone] = useState(false);
   const [elapsed, setElapsed] = useState(0);
-  const timerRef = useRef(null);
+  const [starting, setStarting] = useState(false);
+  const timerRef = useRef<NodeJS.Timeout | null>(null);
+  const socketRef = useRef<Socket | null>(null);
+  const [isConnected, setIsConnected] = useState(false);
 
-  const runPipeline = () => {
-    if (started) return;
+  useEffect(() => {
+    if (!currentRun) {
+      setStarted(false);
+      setDone(false);
+      setElapsed(0);
+      setAgents(Object.fromEntries(AGENT_ORDER.map(k => [k, { status: "queued", logs: [], result: null }])));
+      return;
+    }
+
+    const runResult = (currentRun.result as Record<string, unknown> | undefined) ?? undefined;
+    const pipelineResult =
+      ((runResult?.pipeline_result as Record<string, unknown> | undefined) ?? runResult);
+    if (!pipelineResult || typeof pipelineResult !== "object") return;
+
+    const nextAgents = Object.fromEntries(
+      AGENT_ORDER.map((k) => [k, { status: "queued", logs: [], result: null }]),
+    ) as Record<string, { status: string; logs: Array<{ message: string; payload?: Record<string, unknown> }>; result: Record<string, unknown> | null }>;
+
+    const summaryTrace = Array.isArray(pipelineResult.trace)
+      ? (pipelineResult.trace as string[])
+      : [];
+
+    summaryTrace.forEach((line) => {
+      const msg = String(line);
+      const lower = msg.toLowerCase();
+      const inferred = (lower.includes("synthesis") || lower.includes("validation"))
+          ? "synthesis"
+          : lower.includes("compliance")
+            ? "compliance"
+            : lower.includes("planner")
+              ? "planner"
+              : "evaluation";
+      if (!nextAgents[inferred]) return;
+      nextAgents[inferred].logs.push({ message: msg });
+      if (nextAgents[inferred].status === "queued") nextAgents[inferred].status = "complete";
+    });
+
+    const mapping: Record<string, string[]> = {
+      evaluation: ["evaluation"],
+      planner: ["plan", "planner"],
+      compliance: ["compliance"],
+      synthesis: ["synthesis"],
+    };
+
+    AGENT_ORDER.forEach((agentKey) => {
+      const keys = mapping[agentKey] ?? [agentKey];
+      const found = keys
+        .map((k) => pipelineResult[k])
+        .find((v) => v && typeof v === "object") as Record<string, unknown> | undefined;
+
+      if (!found) return;
+      nextAgents[agentKey].result = found;
+      nextAgents[agentKey].status = "complete";
+
+      const foundTrace = Array.isArray(found.trace) ? (found.trace as string[]) : [];
+      foundTrace.forEach((line) => {
+        nextAgents[agentKey].logs.push({ message: String(line) });
+      });
+    });
+
+    setAgents(nextAgents);
+    setStarted(true);
+    setDone((currentRun.status ?? "").toLowerCase() === "completed" || (currentRun.status ?? "").toLowerCase() === "failed");
+  }, [currentRun]);
+
+  // Connect to WebSocket for real-time agent events
+  useEffect(() => {
+    if (!currentRun || !dataset) {
+      console.log("Waiting for currentRun or dataset...", { currentRun, dataset });
+      return;
+    }
+
+    try {
+      const socketUrl = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:5000";
+      console.log("Connecting to WebSocket at:", socketUrl);
+      
+      const socket = io(`${socketUrl}/agents`, {
+        reconnection: true,
+        reconnectionDelay: 1000,
+        reconnectionAttempts: 5,
+        transports: ['websocket', 'polling'],
+      });
+
+      socket.on("connect", () => {
+        console.log("✅ WebSocket connected, subscribing to run", currentRun.id);
+        setIsConnected(true);
+        // Subscribe to this specific run
+        socket.emit("subscribe_to_run", {
+          runId: currentRun.id,
+          datasetId: dataset.id,
+        });
+      });
+
+      socket.on("disconnect", () => {
+        console.log("❌ WebSocket disconnected");
+        setIsConnected(false);
+      });
+
+      socket.on("subscribed", (data) => {
+        console.log("✅ Subscribed to run:", data);
+      });
+
+      socket.on("agent_event", (event: AgentEvent) => {
+        console.log("📨 Agent event received:", event);
+        // Update agent state based on event
+        const { type, payload } = event;
+        const agent = event.agent === "validation" ? "synthesis" : event.agent;
+
+        if (!AGENT_ORDER.includes(agent)) {
+          return;
+        }
+        
+        setAgents((prev) => {
+          const agent_state = { ...prev[agent] };
+          if (type === "agent_start") {
+            agent_state.status = "running";
+            agent_state.logs = [
+              ...agent_state.logs,
+              { message: `Started ${agent}` },
+            ];
+          } else if (type === "agent_data") {
+            // Extract message if available for log display
+            const message =
+              (payload?.message as string) ||
+              (payload?.phase as string) ||
+              `${agent} event received`;
+            agent_state.logs = [...agent_state.logs, { message }];
+          } else if (type === "agent_complete") {
+            agent_state.status = "complete";
+            agent_state.result = payload;
+            agent_state.logs = [
+              ...agent_state.logs,
+              { message: `Completed ${agent}` },
+            ];
+          }
+          return { ...prev, [agent]: agent_state };
+        });
+
+        if (type === "agent_complete" && agent === "synthesis") {
+          setDone(true);
+          if (timerRef.current) clearInterval(timerRef.current);
+        }
+      });
+
+      socket.on("error", (error) => {
+        console.error("❌ WebSocket error:", error);
+      });
+
+      socketRef.current = socket;
+
+      return () => {
+        console.log("Cleaning up WebSocket connection");
+        socket.disconnect();
+      };
+    } catch (err) {
+      console.error("❌ Failed to connect to WebSocket:", err);
+    }
+  }, [currentRun, dataset]);
+
+  const startPipeline = async () => {
+    if (!dataset || started || starting) return;
+
+    setStarting(true);
     setStarted(true);
     setDone(false);
     setElapsed(0);
     setAgents(Object.fromEntries(AGENT_ORDER.map(k => [k, { status: "queued", logs: [], result: null }])));
 
-    timerRef.current = setInterval(() => setElapsed(e => e + 100), 100);
+    timerRef.current = setInterval(() => setElapsed((e) => e + 100), 100);
 
-    PIPELINE_EVENTS.forEach(evt => {
-      setTimeout(() => {
-        setAgents(prev => {
-          const agent = { ...prev[evt.agent] };
-          if (evt.type === "agent_start")    { agent.status = "running"; }
-          if (evt.type === "agent_data")     { agent.logs = [...agent.logs, evt.payload]; }
-          if (evt.type === "agent_complete") { agent.status = "complete"; agent.result = evt.payload; }
-          return { ...prev, [evt.agent]: agent };
-        });
-        if (evt.type === "agent_complete" && evt.agent === "synthesis") {
-          clearInterval(timerRef.current);
-          setDone(true);
+    // Trigger orchestration on backend with event headers
+    try {
+      const backendUrl = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:5000";
+      const res = await fetch(`${backendUrl}/agents/${dataset.id}/orchestrate`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "X-Backend-Url": backendUrl,
+        },
+      });
+      if (!res.ok) {
+        console.error("Failed to start orchestration:", res.statusText);
+        setStarted(false);
+      } else {
+        const data = await res.json();
+        if (data?.run?.id) {
+          onRunCreated?.(data.run);
         }
-      }, evt.ts);
-    });
+        console.log("Pipeline started successfully");
+      }
+    } catch (err) {
+      console.error("Error starting pipeline:", err);
+      setStarted(false);
+    } finally {
+      setStarting(false);
+    }
   };
 
   const reset = () => {
-    clearInterval(timerRef.current);
-    setStarted(false); setDone(false); setElapsed(0);
+    if (timerRef.current) clearInterval(timerRef.current);
+    setStarted(false);
+    setDone(false);
+    setElapsed(0);
     setAgents(Object.fromEntries(AGENT_ORDER.map(k => [k, { status: "queued", logs: [], result: null }])));
   };
 
-  const activeAgent = AGENT_ORDER.find(k => agents[k].status === "running");
+  const activeAgent = AGENT_ORDER.find((k) => agents[k].status === "running");
+  const datasetName = dataset?.name?.replace(/\.[^/.]+$/, "") || "dataset";
 
   return (
     <div style={{ flex: 1, display: "flex", flexDirection: "column", minWidth: 0, minHeight: 0, fontFamily: "IBM Plex Sans, sans-serif" }}>
@@ -491,11 +1055,16 @@ export default function PipelineLog() {
                 <svg width="13" height="13" viewBox="0 0 24 24" fill="none"><path d="M13 10V3L4 14h7v7l9-11h-7z" stroke="#7C3AED" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg>
               </div>
               <span style={{ fontSize: 11, fontFamily: "IBM Plex Mono, monospace", fontWeight: 700, color: "#57606A", letterSpacing: "0.07em", textTransform: "uppercase" }}>
-                Pipeline — titanic_v3.csv
+                Pipeline — {datasetName}
               </span>
               {started && !done && activeAgent && (
                 <span style={{ fontSize: 10.5, fontFamily: "IBM Plex Mono, monospace", color: "#8B949E" }}>
                   · {AGENT_META[activeAgent]?.label}
+                </span>
+              )}
+              {!isConnected && (
+                <span style={{ fontSize: 10, fontFamily: "IBM Plex Mono, monospace", color: "#DC2626" }}>
+                  · WebSocket disconnected
                 </span>
               )}
             </div>
@@ -512,9 +1081,9 @@ export default function PipelineLog() {
                   : null
               }
               {!started ? (
-                <button onClick={runPipeline} style={{ height: 30, padding: "0 14px", borderRadius: 8, border: "none", background: "#0969DA", color: "#fff", fontSize: 12, fontWeight: 600, fontFamily: "IBM Plex Sans, sans-serif", cursor: "pointer", display: "flex", alignItems: "center", gap: 5 }}>
+                <button disabled={starting} onClick={startPipeline} style={{ height: 30, padding: "0 14px", borderRadius: 8, border: "none", background: starting ? "#8FB7E8" : "#0969DA", color: "#fff", fontSize: 12, fontWeight: 600, fontFamily: "IBM Plex Sans, sans-serif", cursor: starting ? "not-allowed" : "pointer", display: "flex", alignItems: "center", gap: 5 }}>
                   <svg width="11" height="11" viewBox="0 0 24 24" fill="none"><path d="M5 3l14 9-14 9V3z" fill="#fff"/></svg>
-                  Run Pipeline
+                  {starting ? "Starting..." : "Run Pipeline"}
                 </button>
               ) : (
                 <button onClick={reset} style={{ height: 30, padding: "0 12px", borderRadius: 8, border: "1px solid #E1E4E8", background: "#F6F8FA", color: "#57606A", fontSize: 12, fontWeight: 600, fontFamily: "IBM Plex Sans, sans-serif", cursor: "pointer" }}>
@@ -535,15 +1104,23 @@ export default function PipelineLog() {
                   <div style={{ fontSize: 14, fontWeight: 600, color: "#0D1117", fontFamily: "IBM Plex Sans, sans-serif" }}>Pipeline ready</div>
                   <div style={{ fontSize: 12, color: "#8B949E", marginTop: 4, fontFamily: "IBM Plex Mono, monospace" }}>4 agents · titanic_v3.csv</div>
                 </div>
-                <button onClick={runPipeline} style={{ height: 36, padding: "0 20px", borderRadius: 9, border: "none", background: "#0969DA", color: "#fff", fontSize: 13, fontWeight: 600, fontFamily: "IBM Plex Sans, sans-serif", cursor: "pointer", display: "flex", alignItems: "center", gap: 6, marginTop: 4 }}>
+                <button disabled={starting} onClick={startPipeline} style={{ height: 36, padding: "0 20px", borderRadius: 9, border: "none", background: starting ? "#8FB7E8" : "#0969DA", color: "#fff", fontSize: 13, fontWeight: 600, fontFamily: "IBM Plex Sans, sans-serif", cursor: starting ? "not-allowed" : "pointer", display: "flex", alignItems: "center", gap: 6, marginTop: 4 }}>
                   <svg width="12" height="12" viewBox="0 0 24 24" fill="none"><path d="M5 3l14 9-14 9V3z" fill="#fff"/></svg>
-                  Run Pipeline
+                  {starting ? "Starting..." : "Run Pipeline"}
                 </button>
               </div>
             ) : (
               AGENT_ORDER.map((key, i) => (
                 <div key={key}>
-                  <AgentBlock agentKey={key} agentState={agents[key]} />
+                  <AgentBlock 
+                    agentKey={key} 
+                    agentState={agents[key]} 
+                    datasetId={dataset?.id} 
+                    runId={currentRun?.id}
+                    onAnalysisSaved={(analysis) => {
+                      console.log('Analysis saved for agent:', key, analysis);
+                    }}
+                  />
                   {i < AGENT_ORDER.length - 1 && agents[key].status === "complete" && <Arrow from={key} />}
                   {i < AGENT_ORDER.length - 1 && agents[key].status !== "complete" && <div style={{ height: 12 }} />}
                 </div>

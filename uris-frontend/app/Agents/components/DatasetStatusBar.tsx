@@ -1,7 +1,5 @@
 'use client'
 
-import { useState } from "react";
-
 function Divider() {
   return (
     <div
@@ -10,14 +8,51 @@ function Divider() {
   );
 }
 
-export default function DatasetStatusBar() {
-  const runStatus = "COMPLETED";
-  const compliance = "PASSED";
-  const adfi = 0.912;
-  const adfiDelta = "+10.3%";
-  const dataset = "titanic_v3.csv";
-  const task = "Binary Classification";
-  const runId = "run-7f8a2c4d";
+interface Dataset {
+  id: string;
+  name: string;
+  status: string;
+  rowCount: number | null;
+  columnCount: number | null;
+}
+
+interface AgentRun {
+  id: string;
+  status: string;
+  adfiScore: number | null;
+  complianceStatus: string | null;
+  task: string | null;
+  createdAt: string;
+}
+
+interface DatasetStatusBarProps {
+  dataset: Dataset | null;
+  currentRun: AgentRun | null;
+}
+
+export default function DatasetStatusBar({ dataset, currentRun }: DatasetStatusBarProps) {
+  const rawStatus = (currentRun?.status ?? "analyzing").toLowerCase();
+  const runStatus = rawStatus.toUpperCase();
+  const compliance = currentRun?.complianceStatus?.toUpperCase() || "—";
+  const adfi = currentRun?.adfiScore || null;
+  const runStatusTone =
+    rawStatus === "completed"
+      ? { dot: "#34D399", text: "#047857", glow: "0 0 0 2.5px #D1FAE5" }
+      : rawStatus === "analyzing" || rawStatus === "running"
+      ? { dot: "#FBBF24", text: "#B45309", glow: "none" }
+      : { dot: "#F87171", text: "#DC2626", glow: "none" };
+
+  const priorAdfi = null;
+  const adfiDelta =
+    typeof adfi === "number" && typeof priorAdfi === "number" && priorAdfi !== 0
+      ? (((adfi - priorAdfi) / priorAdfi) * 100)
+      : null;
+  const inferredDatasetName = currentRun?.task
+    ? currentRun.task.replace(/_analysis$/i, "").replace(/_/g, " ")
+    : null;
+  const datasetName = dataset?.name || inferredDatasetName || "Loading...";
+  const task = currentRun?.task ? currentRun.task.replace(/_/g, " ").replace(/\b\w/g, c => c.toUpperCase()) : "—";
+  const runId = currentRun?.id ? `run-${currentRun.id.slice(0, 8)}` : "—";
 
   return (
     <div
@@ -75,7 +110,8 @@ export default function DatasetStatusBar() {
             alignItems: "center",
             gap: 10,
             padding: "0 18px",
-            flexShrink: 0,
+            flexShrink: 1,
+            minWidth: 0,
           }}
         >
           <div
@@ -97,7 +133,7 @@ export default function DatasetStatusBar() {
               <path d="M3 12v6c0 1.657 4.03 3 9 3s9-1.343 9-3v-6" stroke="#7C3AED" strokeWidth="1.8" />
             </svg>
           </div>
-          <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
+          <div style={{ display: "flex", flexDirection: "column", gap: 2, minWidth: 0 }}>
             <span
               style={{
                 fontSize: 13,
@@ -106,9 +142,14 @@ export default function DatasetStatusBar() {
                 fontFamily: "IBM Plex Mono, monospace",
                 letterSpacing: -0.2,
                 lineHeight: 1,
+                overflow: "hidden",
+                textOverflow: "ellipsis",
+                whiteSpace: "nowrap",
+                maxWidth: 250,
               }}
+              title={datasetName}
             >
-              {dataset}
+              {datasetName}
             </span>
             <span
               style={{
@@ -116,7 +157,12 @@ export default function DatasetStatusBar() {
                 color: "#8B949E",
                 fontFamily: "IBM Plex Mono, monospace",
                 lineHeight: 1,
+                overflow: "hidden",
+                textOverflow: "ellipsis",
+                whiteSpace: "nowrap",
+                maxWidth: 220,
               }}
+              title={task}
             >
               {task}
             </span>
@@ -145,22 +191,23 @@ export default function DatasetStatusBar() {
               style={{
                 fontSize: 20,
                 fontWeight: 600,
-                color: "#0D1117",
+                color: adfi ? "#0D1117" : "#8B949E",
                 fontFamily: "IBM Plex Mono, monospace",
                 letterSpacing: -0.5,
                 lineHeight: 1,
               }}
             >
-              {adfi.toFixed(3)}
+              {adfi ? adfi.toFixed(3) : "—"}
             </span>
-            <span
-              style={{
+            {adfiDelta !== null && (
+              <span
+                style={{
                 fontSize: 11,
                 fontWeight: 600,
                 fontFamily: "IBM Plex Mono, monospace",
-                color: "#047857",
-                background: "#ECFDF5",
-                border: "1px solid #D1FAE5",
+                color: adfiDelta >= 0 ? "#047857" : "#B45309",
+                background: adfiDelta >= 0 ? "#ECFDF5" : "#FFFBEB",
+                border: adfiDelta >= 0 ? "1px solid #D1FAE5" : "1px solid #FEF3C7",
                 borderRadius: 6,
                 padding: "2px 7px",
                 display: "flex",
@@ -169,8 +216,9 @@ export default function DatasetStatusBar() {
                 lineHeight: 1,
               }}
             >
-              <span style={{ fontSize: 9 }}>▲</span> {adfiDelta}
+              <span style={{ fontSize: 9 }}>{adfiDelta >= 0 ? "▲" : "▼"}</span> {`${adfiDelta >= 0 ? "+" : ""}${adfiDelta.toFixed(1)}%`}
             </span>
+            )}
           </div>
         </div>
 
@@ -275,16 +323,10 @@ export default function DatasetStatusBar() {
                 width: 7,
                 height: 7,
                 borderRadius: "50%",
-                background:
-                  runStatus === "COMPLETED"
-                    ? "#34D399"
-                    : runStatus === "RUNNING"
-                    ? "#FBBF24"
-                    : "#F87171",
+                background: runStatusTone.dot,
                 display: "inline-block",
                 flexShrink: 0,
-                boxShadow:
-                  runStatus === "COMPLETED" ? "0 0 0 2.5px #D1FAE5" : "none",
+                boxShadow: runStatusTone.glow,
               }}
             />
             <span
@@ -292,12 +334,7 @@ export default function DatasetStatusBar() {
                 fontSize: 12.5,
                 fontWeight: 600,
                 fontFamily: "IBM Plex Mono, monospace",
-                color:
-                  runStatus === "COMPLETED"
-                    ? "#047857"
-                    : runStatus === "RUNNING"
-                    ? "#B45309"
-                    : "#DC2626",
+                color: runStatusTone.text,
               }}
             >
               {runStatus}

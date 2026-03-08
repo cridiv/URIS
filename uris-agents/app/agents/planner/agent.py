@@ -4,6 +4,23 @@ from ...utils.bedrock import invoke_nova
 from .prompt import PLANNER_SYSTEM_PROMPT
 
 
+def _fix_json_string(s: str) -> str:
+    """
+    Attempt to fix common JSON issues:
+    - Unquoted property names: key: "value" → "key": "value"
+    - Single quotes to double quotes in some cases
+    - Remove trailing commas before closing braces/brackets
+    """
+    # Remove trailing commas before closing braces/brackets
+    s = re.sub(r',(\s*[}\]])', r'\1', s)
+    
+    # Try to fix unquoted keys: matches patterns like word: or word:
+    # This regex looks for words followed by a colon, but not already quoted
+    s = re.sub(r'([{,]\s*)([a-zA-Z_][a-zA-Z0-9_]*)(\s*:)', r'\1"\2"\3', s)
+    
+    return s
+
+
 def run_planner(dataset_summary: dict, user_goal: str) -> dict:
     """
     Execute Planner Agent:
@@ -24,6 +41,9 @@ Produce the structured plan now.
     raw_output = invoke_nova(PLANNER_SYSTEM_PROMPT, user_message)
 
     cleaned = re.sub(r'^```(?:json)?\s*|\s*```$', '', raw_output, flags=re.MULTILINE).strip()
+    
+    # Try to fix common JSON issues
+    cleaned = _fix_json_string(cleaned)
 
     try:
         plan = json.loads(cleaned)

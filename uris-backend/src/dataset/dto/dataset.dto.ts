@@ -39,7 +39,9 @@ export interface DatasetResponse {
   rowCount: number | null;
   columnCount: number | null;
   columns: unknown;
+  profileMeta: unknown;
   status: string;
   source: string;
   createdAt: string;
+  errorMsg?: string | null;
 }

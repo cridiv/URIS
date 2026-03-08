@@ -1,6 +1,19 @@
 "use client";
 
 import { ReactNode } from "react";
+import { useRouter } from "next/navigation";
+
+interface AgentRun {
+  id: string;
+  status: string;
+  adfiScore: number | null;
+  complianceStatus: string | null;
+  task: string | null;
+  createdAt: string;
+  updatedAt?: string;
+  result?: Record<string, unknown> | null;
+  errorMsg?: string | null;
+}
 
 function MetaRow({ label, children, noBorder }: { label: string; children: ReactNode; noBorder?: boolean }) {
   return (
@@ -54,8 +67,6 @@ function RingProgress({ value, size = 24, stroke = 2, color = "#34D399" }: { val
   );
 }
 
-const sparkData = [0.61, 0.65, 0.70, 0.72, 0.78, 0.793, 0.810, 0.827, 0.912];
-
 function Sparkline({ data, width = 160, height = 40 }: { data: number[]; width?: number; height?: number }) {
   const min = Math.min(...data);
   const max = Math.max(...data);
@@ -90,7 +101,107 @@ function Divider() {
   return <div style={{ height: 1, background: "#F0F2F4", margin: "12px 0" }} />;
 }
 
-export default function AgentResult() {
+export default function AgentResult({ 
+  currentRun, 
+  runs,
+  datasetId,
+}: { 
+  currentRun: AgentRun | null;
+  runs: AgentRun[];
+  datasetId: string;
+}) {
+  const router = useRouter();
+  const toNumber = (value: unknown): number | undefined => {
+    if (typeof value === "number" && Number.isFinite(value)) return value;
+    if (typeof value === "string") {
+      const parsed = Number(value);
+      return Number.isFinite(parsed) ? parsed : undefined;
+    }
+    return undefined;
+  };
+
+  // Extract data from currentRun.result (supports both direct and wrapped payloads)
+  const runResult = (currentRun?.result as Record<string, unknown> | undefined) ?? {};
+  const pipelineResult =
+    ((runResult.pipeline_result as Record<string, unknown> | undefined) ?? runResult);
+  const evaluation = (pipelineResult.evaluation as Record<string, unknown> | undefined) ?? {};
+  const compliance = (pipelineResult.compliance as Record<string, unknown> | undefined) ?? {};
+  const synthesis =
+    ((pipelineResult.synthesis as Record<string, unknown> | undefined)?.result as Record<string, unknown> | undefined) ??
+    ((pipelineResult.synthesis as Record<string, unknown> | undefined) ?? {});
+  const validation = (pipelineResult.validation as Record<string, unknown> | undefined) ?? {};
+  const schemaSummary = (evaluation.schema_summary as Record<string, unknown> | undefined) ?? {};
+  const schemaColumns = (schemaSummary.columns as Array<Record<string, unknown>> | undefined) ?? [];
+  const regulatoryExposure =
+    (compliance.regulatory_exposure as Record<string, string> | undefined) ?? {};
+  const synthesisReport =
+    (synthesis.synthesis_report as Record<string, unknown> | undefined) ?? {};
+  const correlationReport =
+    (synthesis.correlation_report as Record<string, unknown> | undefined) ??
+    (synthesis.correlation_result as Record<string, unknown> | undefined) ?? {};
+  
+  // Calculate PII Risk level from compliance data
+  const privacyRiskScore = toNumber(compliance.privacy_risk_score);
+  const piiRiskLevel = privacyRiskScore === undefined ? "High" : 
+    privacyRiskScore <= 0.35 ? "Low" : 
+    privacyRiskScore <= 0.65 ? "Medium" : "High";
+  
+  const piiRiskBars = privacyRiskScore === undefined ? 2 :
+    privacyRiskScore <= 0.35 ? 1 :
+    privacyRiskScore <= 0.65 ? 3 : 5;
+  
+  // Compliance Score
+  const complianceScore = Math.round(
+    (toNumber(validation.confidence) ?? currentRun?.adfiScore ?? toNumber(evaluation.adfi) ?? 0) * 100,
+  );
+  
+  // Policy Match
+  const policyMatch = Object.keys(regulatoryExposure)[0]?.toUpperCase() ?? "N/A";
+  
+  // Missing Fields
+  const missingFieldsCount = schemaColumns.filter((col) => (toNumber(col.missing_pct) ?? 0) > 0).length;
+  
+  // Run metrics
+  const trace = (synthesis.trace as string[] | undefined) ?? [];
+  const synthesisAttempts = trace.filter((line) => /^Attempt\s+\d+\//i.test(line)).length || toNumber(synthesis.attempt) || 0;
+  const corrDriftRaw =
+    toNumber(correlationReport.max_pair_difference) ??
+    toNumber((correlationReport.drift_metrics as Record<string, unknown> | undefined)?.max_pair_difference) ??
+    0;
+  const corrDriftMax = corrDriftRaw * 100;
+  const rowsGenerated =
+    toNumber((pipelineResult.synthesis as Record<string, unknown> | undefined)?.augmented_rows) ??
+    toNumber(synthesis.augmented_rows) ??
+    toNumber(synthesisReport.rows_generated) ??
+    0;
+  const policyRules =
+    ((compliance.recommended_actions as Array<unknown> | undefined)?.length ?? 0) +
+    ((compliance.blocked_columns as Array<unknown> | undefined)?.length ?? 0);
+  const createdMs = currentRun?.createdAt ? new Date(currentRun.createdAt).getTime() : NaN;
+  const updatedMs = currentRun?.updatedAt ? new Date(currentRun.updatedAt).getTime() : NaN;
+  const durationSecs =
+    Number.isFinite(createdMs) && Number.isFinite(updatedMs) && updatedMs >= createdMs
+      ? (updatedMs - createdMs) / 1000
+      : Math.max(0.01, trace.length * 0.12);
+  
+  // ADFI Score data
+  const adfiScore = currentRun?.adfiScore ?? toNumber(evaluation.adfi) ?? 0;
+  const historicalAdfi = runs
+    .map((r) => r.adfiScore)
+    .filter((v): v is number => typeof v === "number" && Number.isFinite(v))
+    .slice(0, 8)
+    .reverse();
+  const rawSparkData = [...historicalAdfi, adfiScore]
+    .filter((v) => Number.isFinite(v))
+    .slice(-9);
+  const sparkData = rawSparkData.length >= 2 ? rawSparkData : [adfiScore, adfiScore];
+  const baseAdfi = sparkData.length > 0 ? sparkData[0] : adfiScore;
+  const adfiIncrease = baseAdfi > 0 ? ((adfiScore - baseAdfi) / baseAdfi * 100).toFixed(1) : "0.0";
+  const adfiTrend = Math.abs(Number(adfiIncrease));
+  
+  // Run ID
+  const runId = currentRun?.id?.slice(0, 6) ?? "—";
+  
   return (
     <div style={{
       width: 252,
@@ -143,11 +254,11 @@ export default function AgentResult() {
                 {[1,2,3,4,5].map(i => (
                   <div key={i} style={{
                     width: 6, height: 14, borderRadius: 2,
-                    background: i <= 2 ? "#F87171" : "#F0F2F4",
+                    background: i <= piiRiskBars ? "#F87171" : "#F0F2F4",
                   }} />
                 ))}
               </div>
-              <span style={{ fontSize: 11.5, fontFamily: "IBM Plex Mono, monospace", fontWeight: 600, color: "#DC2626" }}>High</span>
+              <span style={{ fontSize: 11.5, fontFamily: "IBM Plex Mono, monospace", fontWeight: 600, color: "#DC2626" }}>{piiRiskLevel}</span>
             </div>
           </div>
 
@@ -158,8 +269,8 @@ export default function AgentResult() {
           }}>
             <span style={{ fontSize: 11.5, color: "#8B949E" }}>Compliance</span>
             <div style={{ display: "flex", alignItems: "center", gap: 7 }}>
-              <RingProgress value={88} size={24} stroke={2} color="#34D399" />
-              <span style={{ fontSize: 11.5, fontFamily: "IBM Plex Mono, monospace", fontWeight: 600, color: "#047857" }}>88%</span>
+              <RingProgress value={complianceScore} size={24} stroke={2} color="#34D399" />
+              <span style={{ fontSize: 11.5, fontFamily: "IBM Plex Mono, monospace", fontWeight: 600, color: "#047857" }}>{complianceScore}%</span>
             </div>
           </div>
 
@@ -173,7 +284,7 @@ export default function AgentResult() {
               fontSize: 11, fontFamily: "IBM Plex Mono, monospace", fontWeight: 600,
               color: "#047857", background: "#ECFDF5", border: "1px solid #D1FAE5",
               borderRadius: 5, padding: "2px 7px",
-            }}>GDPR</span>
+            }}>{policyMatch}</span>
           </div>
 
           {/* Missing Fields */}
@@ -182,7 +293,7 @@ export default function AgentResult() {
             padding: "7px 0",
           }}>
             <span style={{ fontSize: 11.5, color: "#8B949E" }}>Missing Fields</span>
-            <span style={{ fontSize: 11.5, fontFamily: "IBM Plex Mono, monospace", fontWeight: 600, color: "#DC2626" }}>2</span>
+            <span style={{ fontSize: 11.5, fontFamily: "IBM Plex Mono, monospace", fontWeight: 600, color: "#DC2626" }}>{missingFieldsCount}</span>
           </div>
         </div>
       </div>
@@ -219,37 +330,29 @@ export default function AgentResult() {
             fontSize: 10, fontFamily: "IBM Plex Mono, monospace", fontWeight: 600,
             color: "#047857", background: "#ECFDF5", border: "1px solid #D1FAE5",
             borderRadius: 5, padding: "2px 7px",
-          }}>run_004</span>
+          }}>run_{runId}</span>
         </div>
 
         <div style={{ padding: "10px 16px", flex: 1, minHeight: 0, overflowY: "auto", display: "flex", flexDirection: "column" }}>
 
           <MetaRow label="Synthesis Attempts">
-            <span style={{ color: "#0D1117" }}>12</span>
+            <span style={{ color: "#0D1117" }}>{synthesisAttempts}</span>
           </MetaRow>
           <MetaRow label="Corr. Drift (max)">
             <span style={{
               color: "#B45309", background: "#FFFBEB",
               border: "1px solid #FEF3C7",
               borderRadius: 5, fontSize: 11, padding: "1px 6px",
-            }}>86.4%</span>
+            }}>{corrDriftMax.toFixed(1)}%</span>
           </MetaRow>
           <MetaRow label="Rows Generated">
-            <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-              <span style={{ color: "#0D1117" }}>891</span>
-              <span style={{
-                fontSize: 10, fontFamily: "IBM Plex Mono, monospace", fontWeight: 600,
-                color: "#B45309", background: "#FFFBEB",
-                border: "1px solid #FEF3C7",
-                borderRadius: 5, padding: "1px 5px",
-              }}>Medium</span>
-            </div>
+            <span style={{ color: "#0D1117" }}>{rowsGenerated}</span>
           </MetaRow>
           <MetaRow label="Policy Rules">
-            <span style={{ color: "#0D1117" }}>9</span>
+            <span style={{ color: "#0D1117" }}>{policyRules}</span>
           </MetaRow>
           <MetaRow label="Duration" noBorder>
-            <span style={{ color: "#0D1117" }}>0.89s</span>
+            <span style={{ color: "#0D1117" }}>{durationSecs.toFixed(2)}s</span>
           </MetaRow>
 
           <Divider />
@@ -268,12 +371,12 @@ export default function AgentResult() {
                 <span style={{
                   fontSize: 18, fontWeight: 700, color: "#0D1117",
                   fontFamily: "IBM Plex Mono, monospace", letterSpacing: -0.5, lineHeight: 1,
-                }}>0.912</span>
+                }}>{adfiScore.toFixed(3)}</span>
                 <span style={{
                   fontSize: 10, fontFamily: "IBM Plex Mono, monospace", fontWeight: 700,
                   color: "#047857", background: "#ECFDF5", border: "1px solid #D1FAE5",
                   borderRadius: 5, padding: "2px 6px",
-                }}>▲ +10.3%</span>
+                }}>▲ +{adfiTrend.toFixed(1)}%</span>
               </div>
             </div>
 
@@ -289,11 +392,11 @@ export default function AgentResult() {
               }}>
                 <div style={{ display: "flex", flexDirection: "column", gap: 1 }}>
                   <span style={{ fontSize: 9.5, color: "#8B949E", fontFamily: "IBM Plex Mono, monospace", textTransform: "uppercase", letterSpacing: "0.06em" }}>Before</span>
-                  <span style={{ fontSize: 11, fontFamily: "IBM Plex Mono, monospace", fontWeight: 600, color: "#57606A" }}>0.610</span>
+                  <span style={{ fontSize: 11, fontFamily: "IBM Plex Mono, monospace", fontWeight: 600, color: "#57606A" }}>{baseAdfi.toFixed(3)}</span>
                 </div>
                 <div style={{ display: "flex", flexDirection: "column", gap: 1, alignItems: "flex-end" }}>
                   <span style={{ fontSize: 9.5, color: "#8B949E", fontFamily: "IBM Plex Mono, monospace", textTransform: "uppercase", letterSpacing: "0.06em" }}>% Increase</span>
-                  <span style={{ fontSize: 11, fontFamily: "IBM Plex Mono, monospace", fontWeight: 700, color: "#047857" }}>+49.5%</span>
+                  <span style={{ fontSize: 11, fontFamily: "IBM Plex Mono, monospace", fontWeight: 700, color: "#047857" }}>+{Number(adfiIncrease).toFixed(1)}%</span>
                 </div>
               </div>
             </div>
@@ -312,6 +415,10 @@ export default function AgentResult() {
             cursor: "pointer", transition: "all 0.15s",
             fontFamily: "IBM Plex Sans, sans-serif",
           }}
+            onClick={() => {
+              if (!currentRun?.id || !datasetId) return;
+              router.push(`/Audit-Log/logs/${encodeURIComponent(datasetId)}/${encodeURIComponent(currentRun.id)}`);
+            }}
             onMouseEnter={e => {
               e.currentTarget.style.background = "#0969DA";
               const span = e.currentTarget.querySelector("span") as HTMLElement;

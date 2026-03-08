@@ -1,7 +1,8 @@
 import { Injectable, Logger, InternalServerErrorException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { S3Client, DeleteObjectCommand, S3ServiceException } from '@aws-sdk/client-s3';
+import { S3Client, DeleteObjectCommand, S3ServiceException, GetObjectCommand } from '@aws-sdk/client-s3';
 import { Upload } from '@aws-sdk/lib-storage';
+import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 
 @Injectable()
 export class S3StorageService {
@@ -72,5 +73,24 @@ export class S3StorageService {
 
   getBucket(): string {
     return this.bucket;
+  }
+
+  /**
+   * Generate a presigned URL for downloading a file from S3
+   * URL expires after the specified time (default 1 hour)
+   */
+  async getPresignedDownloadUrl(key: string, expiresIn: number = 3600): Promise<string> {
+    try {
+      const command = new GetObjectCommand({
+        Bucket: this.bucket,
+        Key: key,
+      });
+
+      const url = await getSignedUrl(this.client, command, { expiresIn });
+      return url;
+    } catch (err) {
+      this.logger.error(`Failed to generate presigned URL for ${key}: ${String(err)}`);
+      throw new InternalServerErrorException('Failed to generate download URL');
+    }
   }
 }

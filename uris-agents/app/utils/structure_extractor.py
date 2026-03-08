@@ -1,5 +1,9 @@
 import re
 import pandas as pd
+import warnings
+
+# Suppress specific pandas warnings about regex match groups
+warnings.filterwarnings('ignore', message='This pattern is interpreted as a regular expression')
 
 TITLE_PATTERN = re.compile(
     r'\b(Mr|Mrs|Miss|Ms|Dr|Prof|Rev|Col|Major|Capt|Sir|Lady|Master)\b\.?',
@@ -45,9 +49,12 @@ def extract_structure_hints(dataset_path: str, pii_columns: list) -> dict:
     Passed directly to the compliance agent as ground truth.
     """
     try:
-        df = pd.read_csv(dataset_path)
-    except Exception as e:
-        return {"error": f"Could not load dataset for structure extraction: {str(e)}"}
+        df = pd.read_csv(dataset_path, sep=",")
+    except Exception:
+        try:
+            df = pd.read_csv(dataset_path)
+        except Exception as e:
+            return {"error": f"Could not load dataset for structure extraction: {str(e)}"}
 
     hints = {}
 
@@ -63,7 +70,11 @@ def extract_structure_hints(dataset_path: str, pii_columns: list) -> dict:
         col_findings = []
 
         for p in PATTERNS:
-            match_rate = sample.str.contains(p["pattern"], regex=True).mean()
+            try:
+                match_rate = sample.str.contains(p["pattern"], regex=True, na=False).mean()
+            except Exception:
+                # If pattern fails, skip it
+                match_rate = 0.0
 
             if match_rate >= MATCH_THRESHOLD:
                 col_findings.append({

@@ -191,6 +191,8 @@ export default function DatasetsPage() {
   const [sortDir, setSortDir]     = useState<"asc" | "desc">("desc");
   const [search, setSearch]       = useState("");
   const [selected, setSelected]   = useState<Set<string>>(new Set());
+  const [menuOpen, setMenuOpen]   = useState<string | null>(null);
+  const [analyzingId, setAnalyzingId] = useState<string | null>(null);
 
   // ── Fetch ────────────────────────────────────────────────────────────────
   const fetchDatasets = useCallback(async () => {
@@ -262,6 +264,17 @@ export default function DatasetsPage() {
     allChecked
       ? setSelected(new Set())
       : setSelected(new Set(filtered.map((d) => d.id)));
+
+  const handleAnalyze = (dataset: Dataset) => {
+    if (dataset.status !== "ready") return;
+
+    // Simply redirect to agents page - user will click "Run Pipeline" to start analysis
+    setAnalyzingId(dataset.id);
+    setTimeout(() => {
+      window.location.href = `/Agents?datasetId=${dataset.id}`;
+      setAnalyzingId(null);
+    }, 500);
+  };
 
   return (
     <>
@@ -494,9 +507,43 @@ export default function DatasetsPage() {
 
                             {/* Actions */}
                             <td className="px-3 py-4">
-                              <button className="w-7 h-7 rounded-lg text-ink-400 hover:bg-surface-100 hover:text-ink-700 flex items-center justify-center transition-colors opacity-0 group-hover:opacity-100">
-                                <MoreIcon />
-                              </button>
+                              <div className="relative">
+                                <button 
+                                  onClick={() => setMenuOpen(menuOpen === dataset.id ? null : dataset.id)}
+                                  className="w-7 h-7 rounded-lg text-ink-400 hover:bg-surface-100 hover:text-ink-700 flex items-center justify-center transition-colors opacity-0 group-hover:opacity-100"
+                                >
+                                  <MoreIcon />
+                                </button>
+                                {menuOpen === dataset.id && (
+                                  <div className="absolute right-0 top-8 z-50 w-40 bg-white rounded-lg border border-surface-200 shadow-lg py-1 animate-in fade-in-0 zoom-in-95 duration-100">
+                                    <button
+                                      onClick={() => void handleAnalyze(dataset)}
+                                      disabled={dataset.status !== "ready" || analyzingId === dataset.id}
+                                      className="w-full px-3 py-2 text-left text-[13px] text-ink-700 hover:bg-surface-50 transition-colors flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                                    >
+                                      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                        <line x1="18" y1="20" x2="18" y2="10" />
+                                        <line x1="12" y1="20" x2="12" y2="4" />
+                                        <line x1="6" y1="20" x2="6" y2="14" />
+                                      </svg>
+                                      {analyzingId === dataset.id ? "Starting..." : "Analyze"}
+                                    </button>
+                                    <button
+                                      onClick={() => {
+                                        console.log('Delete:', dataset.id);
+                                        setMenuOpen(null);
+                                      }}
+                                      className="w-full px-3 py-2 text-left text-[13px] text-red-600 hover:bg-red-50 transition-colors flex items-center gap-2"
+                                    >
+                                      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                        <polyline points="3 6 5 6 21 6" />
+                                        <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
+                                      </svg>
+                                      Delete
+                                    </button>
+                                  </div>
+                                )}
+                              </div>
                             </td>
                           </tr>
                         );

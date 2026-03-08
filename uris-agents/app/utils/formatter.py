@@ -20,7 +20,20 @@ def format_file(filepath: str) -> pd.DataFrame:
 
     encoding = detect_encoding(filepath)
 
-    # Try with auto-detection first
+    # Try with comma first (most common for URIS datasets)
+    try:
+        df = pd.read_csv(
+            filepath,
+            encoding=encoding,
+            sep=",",
+            on_bad_lines="skip"
+        )
+        if not df.empty and len(df.columns) > 1:
+            return _clean_dataframe(df)
+    except Exception:
+        pass
+
+    # Try with auto-detection if comma didn't work
     try:
         df = pd.read_csv(
             filepath,
@@ -29,7 +42,7 @@ def format_file(filepath: str) -> pd.DataFrame:
             engine="python",
             on_bad_lines="skip"
         )
-        if len(df.columns) > 1:
+        if not df.empty and len(df.columns) > 1:
             return _clean_dataframe(df)
     except Exception:
         pass
@@ -39,7 +52,7 @@ def format_file(filepath: str) -> pd.DataFrame:
     best_col_count = 0
 
     for enc in [encoding, "utf-8", "latin-1", "cp1252"]:
-        for sep in [",", ";", "\t", "|"]:
+        for sep in [",", ";", "\t", "|", " "]:
             try:
                 temp_df = pd.read_csv(
                     filepath,

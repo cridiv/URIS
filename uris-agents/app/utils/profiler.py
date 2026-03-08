@@ -41,20 +41,34 @@ def profile_dataset(filepath: str) -> dict:
     elif suffix == ".csv":
         encoding = detect_encoding(filepath)
 
-        # Try with auto-detection first
+        # Try with comma first (most common for URIS datasets)
         df = None
         try:
             temp_df = pd.read_csv(
                 filepath,
                 encoding=encoding,
-                sep=None,
-                engine="python",
+                sep=",",
                 on_bad_lines="skip"
             )
-            if len(temp_df.columns) > 1:
+            if not temp_df.empty and len(temp_df.columns) > 1:
                 df = temp_df
         except Exception:
             pass
+
+        # Try with auto-detection if comma didn't work
+        if df is None:
+            try:
+                temp_df = pd.read_csv(
+                    filepath,
+                    encoding=encoding,
+                    sep=None,
+                    engine="python",
+                    on_bad_lines="skip"
+                )
+                if not temp_df.empty and len(temp_df.columns) > 1:
+                    df = temp_df
+            except Exception:
+                pass
 
         # Fall back: try every delimiter, keep best result
         if df is None:
@@ -62,7 +76,7 @@ def profile_dataset(filepath: str) -> dict:
             best_col_count = 0
 
             for enc in [encoding, "utf-8", "latin-1", "cp1252"]:
-                for sep in [",", ";", "\t", "|"]:
+                for sep in [",", ";", "\t", "|", " "]:
                     try:
                         temp_df = pd.read_csv(
                             filepath,

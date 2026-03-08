@@ -220,9 +220,11 @@ export class DatasetService {
       rowCount: d.rowCount,
       columnCount: d.columnCount,
       columns: d.columns,
+      profileMeta: d.profileMeta,
       status: d.status,
       source: d.source,
       createdAt: d.createdAt.toISOString(),
+      errorMsg: d.errorMsg,
     };
   }
 }

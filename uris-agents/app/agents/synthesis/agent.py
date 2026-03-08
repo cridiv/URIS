@@ -9,6 +9,22 @@ from ...utils.privacy_checker import run_privacy_check
 from ...utils.correlation_checker import run_correlation_check
 
 
+def _fix_json_string(s: str) -> str:
+    """
+    Attempt to fix common JSON issues:
+    - Unquoted property names: key: "value" → "key": "value"
+    - Remove trailing commas before closing braces/brackets
+    """
+    # Remove trailing commas before closing braces/brackets
+    s = re.sub(r',(\s*[}\]])', r'\1', s)
+    
+    # Try to fix unquoted keys: matches patterns like word: or word:
+    # This regex looks for words followed by a colon, but not already quoted
+    s = re.sub(r'([{,]\s*)([a-zA-Z_][a-zA-Z0-9_]*)(\s*:)', r'\1"\2"\3', s)
+    
+    return s
+
+
 def prepare_synthesis_input(
     evaluation: Dict,
     compliance: Dict,
@@ -24,6 +40,9 @@ def prepare_synthesis_input(
     """
     quality_scores = evaluation.get("quality_scores", {})
     balance = quality_scores.get("balance", 1.0)
+    # Handle None balance by defaulting to 1.0
+    if balance is None:
+        balance = 1.0
 
     payload = {
         "task_type": task_type,
@@ -113,6 +132,7 @@ def run_synthesis_agent(
     target_column: Optional[str] = None,
     max_retries: int = 3,
     rejection_context: Optional[Dict] = None,
+    event_emitter = None,
 ) -> Dict[str, Any]:
     """
     Execute Synthesis Agent:
@@ -134,7 +154,13 @@ def run_synthesis_agent(
         starting_budget = 600
 
     current_budget = starting_budget
-    raw_df = pd.read_csv(dataset_path)
+    
+    # Read CSV with explicit comma delimiter (most common for URIS datasets)
+    try:
+        raw_df = pd.read_csv(dataset_path, sep=",")
+    except Exception:
+        # Fallback to auto-detection if comma fails
+        raw_df = pd.read_csv(dataset_path)
 
     blocked_columns = compliance.get("blocked_columns", [])
     identifier_cols = get_identifier_columns(raw_df)
@@ -196,10 +222,18 @@ Recommended adjustments:
 
         raw_output = invoke_nova(SYNTHESIS_SYSTEM_PROMPT, user_message)
         cleaned = re.sub(r'^```(?:json)?\s*|\s*```$', '', raw_output, flags=re.MULTILINE).strip()
+        
+        # Try to fix common JSON issues
+        cleaned = _fix_json_string(cleaned)
 
         try:
             strategy_decision = json.loads(cleaned)
             trace.append("Nova strategy decision parsed successfully")
+            
+            # Emit reasoning steps if available
+            if event_emitter and "reasoning" in strategy_decision:
+                for step in strategy_decision.get("reasoning", []):
+                    event_emitter.emit_data("synthesis", message=step)
         except Exception as e:
             trace.append(f"Nova JSON parse failed: {str(e)} — using compliance defaults")
             strategy_decision = {
@@ -208,6 +242,8 @@ Recommended adjustments:
                 "reasoning": ["Fallback due to Nova parse error"],
                 "confidence": 0.0
             }
+            if event_emitter:
+                event_emitter.emit_data("synthesis", message="Fallback due to Nova parse error")
 
         # ── 2. Enforce compliance ─────────────────────────────────
         strategy_decision = _enforce_compliance(strategy_decision, compliance)
