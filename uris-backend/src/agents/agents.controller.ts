@@ -73,6 +73,7 @@ export class AgentsController {
     @Body() event: AgentReasoningEventDTO,
   ) {
     console.log(`[AgentsController] Received event for run ${runId}:`, event);
+    await this.agentsService.recordRunEvent(datasetId, runId, event);
     // Broadcast event to all connected WebSocket clients watching this run
     this.agentsGateway.emitToRun(datasetId, runId, event);
     return { ok: true, message: 'Event received and broadcasted' };
@@ -116,5 +117,18 @@ export class AgentsController {
     @Param('runId') runId: string,
   ) {
     return this.agentsService.getAnalysis(datasetId, runId);
+  }
+
+  /**
+   * GET /agents/:datasetId/runs/:runId/download-synthetic
+   * Retrieve a download URL for an already-generated synthetic dataset.
+   */
+  @Get(':datasetId/runs/:runId/download-synthetic')
+  @HttpCode(HttpStatus.OK)
+  async getSyntheticDownload(
+    @Param('datasetId') datasetId: string,
+    @Param('runId') runId: string,
+  ) {
+    return this.agentsService.getSyntheticDownload(datasetId, runId);
   }
 }

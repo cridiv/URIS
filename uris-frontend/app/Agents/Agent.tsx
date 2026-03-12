@@ -52,6 +52,15 @@ export default function AgentsView({ datasetId, initialRunId }: AgentsViewProps)
 
   const activeDatasetId = datasetId ?? null;
 
+  useEffect(() => {
+    if (!activeDatasetId) return;
+    try {
+      localStorage.setItem("uris_active_dataset_id", activeDatasetId);
+    } catch {
+      // ignore storage errors
+    }
+  }, [activeDatasetId]);
+
   const handleRunCreated = (run: {
     id: string;
     status: string;

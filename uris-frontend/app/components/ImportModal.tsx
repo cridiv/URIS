@@ -420,6 +420,8 @@ function S3Modal({ onClose, onBack }: { onClose: () => void; onBack: () => void 
 const SOURCES = ["Amazon S3", "Snowflake", "BigQuery", "PostgreSQL"] as const;
 type Source = typeof SOURCES[number];
 
+const AVAILABLE_SOURCES: ReadonlySet<Source> = new Set(["Amazon S3"]);
+
 // ── Main Modal ────────────────────────────────────────────────────────────────
 export default function ImportModal({ onClose }: { onClose: () => void }) {
   const [dragging, setDragging] = useState(false);
@@ -428,6 +430,7 @@ export default function ImportModal({ onClose }: { onClose: () => void }) {
   const [uploadError, setUploadError] = useState<string | null>(null);
 
   const handleSourceClick = (src: Source) => {
+    if (!AVAILABLE_SOURCES.has(src)) return;
     if (src === "Amazon S3") setS3Open(true);
   };
 
@@ -594,32 +597,45 @@ export default function ImportModal({ onClose }: { onClose: () => void }) {
 
               {/* Source list */}
               <div className="flex flex-col gap-1.5 flex-1">
-                {SOURCES.map((src) => (
-                  <button
-                    key={src}
-                    onClick={() => handleSourceClick(src)}
-                    className={[
-                      "flex items-center gap-2.5 px-3 py-2 rounded-lg border transition-all text-left group w-full",
-                      src === "Amazon S3"
-                        ? "border-[#FF9900]/25 hover:border-[#FF9900]/50 hover:bg-[#FF9900]/5"
-                        : "border-surface-200 hover:border-surface-300 hover:bg-surface-50",
-                    ].join(" ")}
-                  >
-                    <SourceIcon name={src} />
-                    <div className="flex-1 min-w-0">
-                      <p className="text-[12px] font-medium text-ink-800 leading-none">{src}</p>
-                      <p className="text-[10.5px] text-ink-400 mt-0.5">
-                        {src === "Amazon S3"  && "S3 bucket · IAM credentials"}
-                        {src === "Snowflake"  && "Cloud data warehouse"}
-                        {src === "BigQuery"   && "Google cloud analytics"}
-                        {src === "PostgreSQL" && "Relational database"}
-                      </p>
-                    </div>
-                    <span className="text-ink-300 group-hover:text-ink-500 transition-colors flex-shrink-0">
-                      <ChevronRightIcon />
-                    </span>
-                  </button>
-                ))}
+                {SOURCES.map((src) => {
+                  const isAvailable = AVAILABLE_SOURCES.has(src);
+
+                  return (
+                    <button
+                      key={src}
+                      onClick={() => handleSourceClick(src)}
+                      disabled={!isAvailable}
+                      aria-disabled={!isAvailable}
+                      className={[
+                        "flex items-center gap-2.5 px-3 py-2 rounded-lg border transition-all text-left group w-full",
+                        isAvailable
+                          ? "border-[#FF9900]/25 hover:border-[#FF9900]/50 hover:bg-[#FF9900]/5"
+                          : "border-surface-200 bg-surface-50/70 cursor-not-allowed",
+                      ].join(" ")}
+                    >
+                      <div className={isAvailable ? "contents" : "contents blur-[1.5px] opacity-60 saturate-0"}>
+                        <SourceIcon name={src} />
+                        <div className="flex-1 min-w-0">
+                          <p className="text-[12px] font-medium text-ink-800 leading-none">{src}</p>
+                          <p className="text-[10.5px] text-ink-400 mt-0.5">
+                            {src === "Amazon S3"  && "S3 bucket · IAM credentials"}
+                            {src === "Snowflake"  && "Cloud data warehouse"}
+                            {src === "BigQuery"   && "Google cloud analytics"}
+                            {src === "PostgreSQL" && "Relational database"}
+                          </p>
+                        </div>
+                        <span className="text-ink-300 group-hover:text-ink-500 transition-colors shrink-0">
+                          <ChevronRightIcon />
+                        </span>
+                      </div>
+                      {!isAvailable && (
+                        <span className="ml-auto shrink-0 rounded-full border border-surface-200 bg-white px-2 py-0.5 text-[9.5px] font-semibold uppercase tracking-wide text-ink-400">
+                          Unavailable
+                        </span>
+                      )}
+                    </button>
+                  );
+                })}
               </div>
             </div>
           </div>

@@ -5,6 +5,8 @@ import json
 import numpy as np
 from fastapi import APIRouter, UploadFile, File, Form, HTTPException, BackgroundTasks, Header
 from fastapi.responses import JSONResponse, FileResponse
+from pydantic import BaseModel
+from typing import Optional
 from ..agents.orchestrator import run_pipeline
 from ..utils.event_emitter import AgentEventEmitter
 
@@ -45,6 +47,22 @@ def clean_for_json(obj):
     return obj
 
 
+# ── Policy-first endpoint ─────────────────────────────────────────────────────
+# Called by the NestJS PolicyService when the user clicks "Run Pipeline"
+# from the policy page. Receives policy_config as a JSON body field
+# alongside the file upload.
+#
+# The policy_config shape (from NestJS policy.service.ts):
+# {
+#   "resolved_directives": [{ verb, target, scope, condition, source, priority }],
+#   "frameworks_attached": [{ id, name, jurisdiction }],
+#   "custom_policies_attached": [{ id, name, description }]
+# }
+#
+# This gets threaded through to run_pipeline → evaluation agent (annotation)
+# → compliance agent (enforcement) → synthesis agent (column manifest).
+
+
 @router.post("/run")
 async def run_uris_pipeline(
     background_tasks: BackgroundTasks,
@@ -53,24 +71,37 @@ async def run_uris_pipeline(
     user_goal: str = Form(...),
     target_column: str = Form(None),
     validate_synthesis: bool = Form(False),
+    # policy_config arrives as a JSON string in the multipart form.
+    # NestJS serialises it before sending; we parse it here.
+    policy_config: Optional[str] = Form(None),
     x_dataset_id: str = Header(None),
     x_run_id: str = Header(None),
     x_backend_url: str = Header(None),
 ):
     print(f"\n[Pipeline] Starting pipeline run...")
-    print(f"[Pipeline] Dataset ID: {x_dataset_id}")
-    print(f"[Pipeline] Run ID: {x_run_id}")
+    print(f"[Pipeline] Dataset ID:  {x_dataset_id}")
+    print(f"[Pipeline] Run ID:      {x_run_id}")
     print(f"[Pipeline] Backend URL: {x_backend_url}")
-    print(f"[Pipeline] File: {file.filename}\n")
-    
+    print(f"[Pipeline] File:        {file.filename}")
+    print(f"[Pipeline] Policy:      {'attached' if policy_config else 'none'}\n")
+
     ext = os.path.splitext(file.filename)[-1].lower()
     if ext not in ALLOWED_EXTENSIONS:
         raise HTTPException(400, detail=f"Only CSV/JSON allowed, got {ext}")
 
-    file_id = uuid.uuid4().hex
+    # Parse policy_config JSON string → dict (or None if not provided)
+    parsed_policy: Optional[dict] = None
+    if policy_config:
+        try:
+            parsed_policy = json.loads(policy_config)
+            directive_count = len(parsed_policy.get("resolved_directives", []))
+            print(f"[Pipeline] Policy config loaded — {directive_count} resolved directives")
+        except json.JSONDecodeError as e:
+            raise HTTPException(400, detail=f"Invalid policy_config JSON: {str(e)}")
+
+    file_id   = uuid.uuid4().hex
     temp_path = os.path.join(UPLOAD_DIR, f"{file_id}{ext}")
 
-    # Initialize event emitter if backend provided event tracking headers
     emitter = None
     if x_dataset_id and x_run_id and x_backend_url:
         print(f"[Pipeline] ✅ Event emitter initialized")
@@ -93,13 +124,13 @@ async def run_uris_pipeline(
             target_column=target_column or None,
             event_emitter=emitter,
             enable_validation=validate_synthesis,
+            policy_config=parsed_policy,   # ← threaded through; None if no policy
         )
 
     except Exception as e:
         raise HTTPException(500, detail=f"Pipeline error: {str(e)}")
 
     finally:
-        # Clean original upload file
         if os.path.exists(temp_path):
             background_tasks.add_task(cleanup_file, temp_path)
 
@@ -107,24 +138,19 @@ async def run_uris_pipeline(
         raise HTTPException(
             status_code=422,
             detail=clean_for_json({
-                "stage": result.get("stage"),
+                "stage":   result.get("stage"),
                 "message": result.get("message"),
-                "trace": result.get("trace", [])
-            })
+                "trace":   result.get("trace", []),
+            }),
         )
 
-    # If synthesis succeeded → offer augmented file for download
     if result.get("synthesis", {}).get("augmented_dataset_path"):
         augmented_path = result["synthesis"]["augmented_dataset_path"]
-        # DO NOT schedule cleanup immediately - file is still being downloaded
-        # Keep file for a reasonable time (backend will handle cleanup after download)
-        
-        response_data = {
+        return JSONResponse(content=clean_for_json({
             "pipeline_result": result,
-            "download_url": f"/pipeline/download/{os.path.basename(augmented_path)}",
-            "message": "Pipeline complete — synthetic data generated"
-        }
-        return JSONResponse(content=clean_for_json(response_data))
+            "download_url":    f"/pipeline/download/{os.path.basename(augmented_path)}",
+            "message":         "Pipeline complete — synthetic data generated",
+        }))
 
     return JSONResponse(content=clean_for_json(result))
 
@@ -134,13 +160,12 @@ async def download_augmented_file(filename: str, background_tasks: BackgroundTas
     file_path = os.path.join(UPLOAD_DIR, filename)
     if not os.path.exists(file_path):
         raise HTTPException(404, detail="File not found or expired")
-    
-    # Schedule cleanup AFTER file is sent to client
+
     background_tasks.add_task(cleanup_file, file_path)
-    
+
     return FileResponse(
         file_path,
         media_type="text/csv",
         filename="uris_augmented_dataset.csv",
-        headers={"X-Accel-Redirect": file_path}  # optional for nginx
+        headers={"X-Accel-Redirect": file_path},
     )

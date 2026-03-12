@@ -1,5 +1,5 @@
-import { redirect } from "next/navigation";
+import HeroPage from "./components/Hero";
 
 export default function RootPage() {
-  redirect("/Datasets");
+  return <HeroPage />;
 }

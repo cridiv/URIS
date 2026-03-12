@@ -127,27 +127,41 @@ function Dot({ delay, color }) {
 // ── Result renderers per agent ────────────────────────────────────────────────
 function EvaluationResult({ payload }) {
   const barColor = v => v >= 0.85 ? "#34D399" : v >= 0.65 ? "#FBBF24" : "#F87171";
+  const qualityScores = payload?.quality_scores && typeof payload.quality_scores === "object"
+    ? payload.quality_scores
+    : {};
+  const criticalGaps = Array.isArray(payload?.critical_gaps) ? payload.critical_gaps : [];
+
   return (
     <div>
       <div style={{ display: "flex", gap: 8, marginBottom: 12 }}>
       </div>
       <SectionHead>Quality Scores</SectionHead>
-      {Object.entries(payload.quality_scores).map(([k, v]) => (
+      {Object.entries(qualityScores).map(([k, rawValue]) => {
+        const v = typeof rawValue === "number" ? rawValue : Number(rawValue) || 0;
+
+        return (
         <div key={k} style={{ display: "flex", alignItems: "center", gap: 10, padding: "4px 0" }}>
           <span style={{ fontSize: 11, color: "#8B949E", width: 130, flexShrink: 0, fontFamily: "IBM Plex Sans, sans-serif" }}>{k.replace(/_/g, " ").replace(/\b\w/g, c => c.toUpperCase())}</span>
           <MiniBar value={v} color={barColor(v)} />
         </div>
-      ))}
+        );
+      })}
       <SectionHead>Critical Gaps</SectionHead>
-      {payload.critical_gaps.map((g, i) => (
-        <div key={i} style={{ display: "flex", alignItems: "flex-start", gap: 8, padding: "6px 8px", background: g.severity === "high" ? "#FEF2F2" : "#FFFBEB", border: `1px solid ${g.severity === "high" ? "#FEE2E2" : "#FEF3C7"}`, borderRadius: 7, marginBottom: 5 }}>
-          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" style={{ marginTop: 1, flexShrink: 0 }}><path d="M12 9v4m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" stroke={g.severity === "high" ? "#DC2626" : "#B45309"} strokeWidth="2" strokeLinecap="round"/></svg>
+      {criticalGaps.map((g, i) => {
+        const gapSeverity = g?.severity === "high" ? "high" : "medium";
+        const affectedColumns = Array.isArray(g?.affected_columns) ? g.affected_columns : [];
+
+        return (
+        <div key={i} style={{ display: "flex", alignItems: "flex-start", gap: 8, padding: "6px 8px", background: gapSeverity === "high" ? "#FEF2F2" : "#FFFBEB", border: `1px solid ${gapSeverity === "high" ? "#FEE2E2" : "#FEF3C7"}`, borderRadius: 7, marginBottom: 5 }}>
+          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" style={{ marginTop: 1, flexShrink: 0 }}><path d="M12 9v4m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" stroke={gapSeverity === "high" ? "#DC2626" : "#B45309"} strokeWidth="2" strokeLinecap="round"/></svg>
           <div>
-            <div style={{ fontSize: 11, color: g.severity === "high" ? "#DC2626" : "#B45309", fontFamily: "IBM Plex Sans, sans-serif", lineHeight: 1.4 }}>{g.description}</div>
-            <div style={{ display: "flex", gap: 4, marginTop: 4 }}>{g.affected_columns.map(c => <Tag key={c}>{c}</Tag>)}</div>
+            <div style={{ fontSize: 11, color: gapSeverity === "high" ? "#DC2626" : "#B45309", fontFamily: "IBM Plex Sans, sans-serif", lineHeight: 1.4 }}>{g?.description ?? "Gap details unavailable"}</div>
+            <div style={{ display: "flex", gap: 4, marginTop: 4 }}>{affectedColumns.map(c => <Tag key={c}>{c}</Tag>)}</div>
           </div>
         </div>
-      ))}
+        );
+      })}
     </div>
   );
 }
@@ -823,6 +837,111 @@ interface AgentEvent {
   };
 }
 
+function pushUniqueLog(target: Array<{ message: string }>, message: string) {
+  const trimmed = message.trim();
+  if (!trimmed) return;
+  if (target.length > 0 && target[target.length - 1].message === trimmed) return;
+  target.push({ message: trimmed });
+}
+
+function toStringArray(value: unknown): string[] {
+  return Array.isArray(value) ? value.map((v) => String(v)).filter((v) => v.trim().length > 0) : [];
+}
+
+function pickFirstString(value: unknown): string | null {
+  if (!value || typeof value !== "object") return null;
+  const source = value as Record<string, unknown>;
+  const candidates = [
+    source.message,
+    source.emitted_message,
+    source.reason,
+    source.summary,
+    source.text,
+  ];
+  for (const candidate of candidates) {
+    if (typeof candidate === "string" && candidate.trim().length > 0) {
+      return candidate.trim();
+    }
+  }
+  return null;
+}
+
+function extractNarrativeLines(payload: unknown): string[] {
+  if (!payload || typeof payload !== "object") return [];
+
+  const source = payload as Record<string, unknown>;
+  const lines: string[] = [];
+
+  const append = (value: unknown) => {
+    toStringArray(value).forEach((line) => {
+      const trimmed = line.trim();
+      if (!trimmed) return;
+      if (!lines.includes(trimmed)) lines.push(trimmed);
+    });
+  };
+
+  append(source.reasoning_steps);
+  append(source.reasoning);
+  append(source.messages);
+  append(source.logs);
+
+  // Prefer content-bearing traces over lifecycle lines when available.
+  const traceLines = toStringArray(source.trace).filter((line) => {
+    const lower = line.toLowerCase();
+    return !(
+      lower.startsWith("starting ") ||
+      lower.startsWith("running ") ||
+      lower.endsWith(" complete") ||
+      lower.includes("finished: success")
+    );
+  });
+  traceLines.forEach((line) => {
+    const trimmed = line.trim();
+    if (!trimmed) return;
+    if (!lines.includes(trimmed)) lines.push(trimmed);
+  });
+
+  const scalarMessage = pickFirstString(source);
+  if (scalarMessage && !lines.includes(scalarMessage)) {
+    lines.unshift(scalarMessage);
+  }
+
+  return lines;
+}
+
+function pickObject(source: Record<string, unknown>, keys: string[]): Record<string, unknown> | null {
+  for (const key of keys) {
+    const value = source[key];
+    if (value && typeof value === "object") {
+      return value as Record<string, unknown>;
+    }
+  }
+  return null;
+}
+
+function normalizeAgentResult(agentKey: string, payload: Record<string, unknown>): Record<string, unknown> {
+  const direct =
+    pickObject(payload, [agentKey, "result", "payload"]) ??
+    payload;
+
+  if (agentKey === "evaluation") {
+    return pickObject(direct, ["evaluation"]) ?? direct;
+  }
+  if (agentKey === "planner") {
+    const plannerNode = pickObject(direct, ["planner", "plan"]) ?? direct;
+    return pickObject(plannerNode, ["plan"]) ?? plannerNode;
+  }
+  if (agentKey === "compliance") {
+    const complianceNode = pickObject(direct, ["compliance"]) ?? direct;
+    return pickObject(complianceNode, ["compliance"]) ?? complianceNode;
+  }
+  if (agentKey === "synthesis") {
+    const synthesisNode = pickObject(direct, ["synthesis"]) ?? direct;
+    return pickObject(synthesisNode, ["result"]) ?? synthesisNode;
+  }
+  return direct;
+}
+
 export default function PipelineLog({ dataset, currentRun, onRunCreated }: AgentAnalysisProps) {
   const [agents, setAgents] = useState(() =>
     Object.fromEntries(AGENT_ORDER.map(k => [k, { status: "queued", logs: [], result: null }]))
@@ -833,6 +952,7 @@ export default function PipelineLog({ dataset, currentRun, onRunCreated }: Agent
   const [starting, setStarting] = useState(false);
   const timerRef = useRef<NodeJS.Timeout | null>(null);
   const socketRef = useRef<Socket | null>(null);
+  const socketRunKeyRef = useRef<string | null>(null);
   const [isConnected, setIsConnected] = useState(false);
 
   useEffect(() => {
@@ -857,21 +977,6 @@ export default function PipelineLog({ dataset, currentRun, onRunCreated }: Agent
       ? (pipelineResult.trace as string[])
       : [];
 
-    summaryTrace.forEach((line) => {
-      const msg = String(line);
-      const lower = msg.toLowerCase();
-      const inferred = (lower.includes("synthesis") || lower.includes("validation"))
-          ? "synthesis"
-          : lower.includes("compliance")
-            ? "compliance"
-            : lower.includes("planner")
-              ? "planner"
-              : "evaluation";
-      if (!nextAgents[inferred]) return;
-      nextAgents[inferred].logs.push({ message: msg });
-      if (nextAgents[inferred].status === "queued") nextAgents[inferred].status = "complete";
-    });
-
     const mapping: Record<string, string[]> = {
       evaluation: ["evaluation"],
       planner: ["plan", "planner"],
@@ -886,14 +991,35 @@ export default function PipelineLog({ dataset, currentRun, onRunCreated }: Agent
         .find((v) => v && typeof v === "object") as Record<string, unknown> | undefined;
 
       if (!found) return;
-      nextAgents[agentKey].result = found;
+      const normalizedResult = normalizeAgentResult(agentKey, found);
+      nextAgents[agentKey].result = normalizedResult;
       nextAgents[agentKey].status = "complete";
 
-      const foundTrace = Array.isArray(found.trace) ? (found.trace as string[]) : [];
-      foundTrace.forEach((line) => {
-        nextAgents[agentKey].logs.push({ message: String(line) });
-      });
+      extractNarrativeLines(normalizedResult).forEach((line) => pushUniqueLog(nextAgents[agentKey].logs, line));
+
+      if (agentKey === "synthesis") {
+        const synthesisInner =
+          ((normalizedResult.result as Record<string, unknown> | undefined) ?? normalizedResult);
+        extractNarrativeLines(synthesisInner).forEach((line) => pushUniqueLog(nextAgents[agentKey].logs, line));
+      }
     });
+
+    if (AGENT_ORDER.every((key) => nextAgents[key].logs.length === 0)) {
+      summaryTrace.forEach((line) => {
+        const msg = String(line);
+        const lower = msg.toLowerCase();
+        const inferred = (lower.includes("synthesis") || lower.includes("validation"))
+            ? "synthesis"
+            : lower.includes("compliance")
+              ? "compliance"
+              : lower.includes("planner")
+                ? "planner"
+                : "evaluation";
+        if (!nextAgents[inferred]) return;
+        pushUniqueLog(nextAgents[inferred].logs, msg);
+        if (nextAgents[inferred].status === "queued") nextAgents[inferred].status = "complete";
+      });
+    }
 
     setAgents(nextAgents);
     setStarted(true);
@@ -902,15 +1028,27 @@ export default function PipelineLog({ dataset, currentRun, onRunCreated }: Agent
 
   // Connect to WebSocket for real-time agent events
   useEffect(() => {
-    if (!currentRun || !dataset) {
-      console.log("Waiting for currentRun or dataset...", { currentRun, dataset });
+    const runId = currentRun?.id;
+    const datasetId = dataset?.id;
+
+    if (!runId || !datasetId) {
       return;
+    }
+
+    const runKey = `${datasetId}:${runId}`;
+    if (socketRef.current && socketRunKeyRef.current === runKey) {
+      return;
+    }
+
+    if (socketRef.current) {
+      socketRef.current.disconnect();
+      socketRef.current = null;
+      socketRunKeyRef.current = null;
     }
 
     try {
       const socketUrl = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:5000";
-      console.log("Connecting to WebSocket at:", socketUrl);
-      
+
       const socket = io(`${socketUrl}/agents`, {
         reconnection: true,
         reconnectionDelay: 1000,
@@ -919,12 +1057,10 @@ export default function PipelineLog({ dataset, currentRun, onRunCreated }: Agent
       });
 
       socket.on("connect", () => {
-        console.log("✅ WebSocket connected, subscribing to run", currentRun.id);
         setIsConnected(true);
-        // Subscribe to this specific run
         socket.emit("subscribe_to_run", {
-          runId: currentRun.id,
-          datasetId: dataset.id,
+          runId,
+          datasetId,
         });
       });
 
@@ -951,24 +1087,23 @@ export default function PipelineLog({ dataset, currentRun, onRunCreated }: Agent
           const agent_state = { ...prev[agent] };
           if (type === "agent_start") {
             agent_state.status = "running";
-            agent_state.logs = [
-              ...agent_state.logs,
-              { message: `Started ${agent}` },
-            ];
           } else if (type === "agent_data") {
-            // Extract message if available for log display
-            const message =
-              (payload?.message as string) ||
-              (payload?.phase as string) ||
-              `${agent} event received`;
-            agent_state.logs = [...agent_state.logs, { message }];
+            const narrative = extractNarrativeLines(payload);
+            if (narrative.length > 0) {
+              narrative.forEach((line) => pushUniqueLog(agent_state.logs, line));
+            } else if (typeof payload?.phase === "string" && payload.phase.trim().length > 0) {
+              pushUniqueLog(agent_state.logs, payload.phase);
+            }
           } else if (type === "agent_complete") {
             agent_state.status = "complete";
-            agent_state.result = payload;
-            agent_state.logs = [
-              ...agent_state.logs,
-              { message: `Completed ${agent}` },
-            ];
+            const normalized = normalizeAgentResult(agent, (payload ?? {}) as Record<string, unknown>);
+            agent_state.result = normalized;
+            extractNarrativeLines(payload).forEach((line) => pushUniqueLog(agent_state.logs, line));
+            if (agent === "synthesis") {
+              const synthesisInner =
+                ((normalized.result as Record<string, unknown> | undefined) ?? normalized);
+              extractNarrativeLines(synthesisInner).forEach((line) => pushUniqueLog(agent_state.logs, line));
+            }
           }
           return { ...prev, [agent]: agent_state };
         });
@@ -984,15 +1119,19 @@ export default function PipelineLog({ dataset, currentRun, onRunCreated }: Agent
       });
 
       socketRef.current = socket;
+      socketRunKeyRef.current = runKey;
 
       return () => {
-        console.log("Cleaning up WebSocket connection");
-        socket.disconnect();
+        if (socketRunKeyRef.current === runKey) {
+          socket.disconnect();
+          socketRef.current = null;
+          socketRunKeyRef.current = null;
+        }
       };
     } catch (err) {
       console.error("❌ Failed to connect to WebSocket:", err);
     }
-  }, [currentRun, dataset]);
+  }, [currentRun?.id, dataset?.id]);
 
   const startPipeline = async () => {
     if (!dataset || started || starting) return;

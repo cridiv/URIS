@@ -17,6 +17,7 @@ interface AuditEvent {
   severity: Severity;
   outcome: Outcome;
   detail: string;
+  payload?: Record<string, unknown> | null;
 }
 
 interface RunPayload {
@@ -28,6 +29,7 @@ interface RunPayload {
   createdAt: string;
   updatedAt?: string;
   result?: Record<string, unknown> | null;
+  analysis?: Record<string, unknown> | null;
   syntheticDataS3Key?: string | null;
 }
 
@@ -105,6 +107,66 @@ function lineToAction(line: string): string {
 function buildEvents(run: RunPayload | null, datasetName: string): AuditEvent[] {
   if (!run) return [];
 
+  const analysis = (run.analysis as Record<string, unknown> | undefined) ?? {};
+  const persistedEventsRaw = analysis.audit_events;
+  const persistedEvents = Array.isArray(persistedEventsRaw)
+    ? (persistedEventsRaw as Array<Record<string, unknown>>)
+    : [];
+
+  if (persistedEvents.length > 0) {
+    return persistedEvents
+      .map((evt) => {
+        const eventType = typeof evt.type === "string" ? evt.type : "agent_data";
+        const agentRaw = typeof evt.agent === "string" ? evt.agent.toLowerCase() : "system";
+        const mappedAgent = (["evaluation", "planner", "compliance", "synthesis"].includes(agentRaw)
+          ? agentRaw
+          : "system") as AgentKey;
+
+        const payload =
+          evt.payload && typeof evt.payload === "object" && !Array.isArray(evt.payload)
+            ? (evt.payload as Record<string, unknown>)
+            : null;
+
+        const message =
+          typeof payload?.message === "string"
+            ? payload.message
+            : payload
+              ? JSON.stringify(payload)
+              : `${eventType} emitted by ${mappedAgent}`;
+
+        const detail = payload
+          ? `${message}\n\nPayload:\n${JSON.stringify(payload, null, 2)}`
+          : message;
+
+        const outcome: Outcome =
+          eventType === "agent_complete"
+            ? inferOutcome(message)
+            : eventType === "agent_start"
+              ? "ok"
+              : inferOutcome(message);
+
+        const actionBase =
+          eventType === "agent_data" && typeof payload?.phase === "string" && payload.phase.trim().length > 0
+            ? `${eventType}_${payload.phase}`
+            : eventType;
+
+        return {
+          ts:
+            typeof evt.ts === "string" && evt.ts.trim().length > 0
+              ? evt.ts
+              : run.createdAt,
+          agent: mappedAgent,
+          action: lineToAction(actionBase),
+          resource: datasetName,
+          severity: inferSeverity(outcome),
+          outcome,
+          detail,
+          payload,
+        } as AuditEvent;
+      })
+      .sort((a, b) => new Date(a.ts).getTime() - new Date(b.ts).getTime());
+  }
+
   const result = (run.result as Record<string, unknown> | undefined) ?? {};
   const pipeline = (result.pipeline_result as Record<string, unknown> | undefined) ?? result;
   const trace = Array.isArray(pipeline.trace) ? (pipeline.trace as string[]) : [];
@@ -125,6 +187,7 @@ function buildEvents(run: RunPayload | null, datasetName: string): AuditEvent[] 
         severity: inferSeverity(outcome),
         outcome,
         detail: line,
+        payload: null,
       };
     });
   }
@@ -138,6 +201,7 @@ function buildEvents(run: RunPayload | null, datasetName: string): AuditEvent[] 
       severity: run.status.toLowerCase() === "completed" ? "info" : run.status.toLowerCase() === "failed" ? "high" : "medium",
       outcome: run.status.toLowerCase() === "completed" ? "ok" : run.status.toLowerCase() === "failed" ? "fail" : "warn",
       detail: `Run ${run.id} is currently ${run.status}.`,
+      payload: null,
     },
   ];
 }
@@ -180,7 +244,7 @@ function SeverityBadge({ severity }: { severity: Severity }) {
   );
 }
 
-function SummaryStrip({ events, baseTs, datasetName, taskLabel, run, onBack }: { events: AuditEvent[]; baseTs: string; datasetName: string; taskLabel: string; run: RunPayload | null; onBack: () => void }) {
+function SummaryStrip({ events, baseTs, datasetName, taskLabel, run, onBack, onDownloadSynthetic, downloading, downloadError }: { events: AuditEvent[]; baseTs: string; datasetName: string; taskLabel: string; run: RunPayload | null; onBack: () => void; onDownloadSynthetic: () => void; downloading: boolean; downloadError: string | null }) {
   const ok = events.filter((e) => e.outcome === "ok").length;
   const warn = events.filter((e) => e.outcome === "warn").length;
   const fail = events.filter((e) => e.outcome === "fail").length;
@@ -214,7 +278,34 @@ function SummaryStrip({ events, baseTs, datasetName, taskLabel, run, onBack }: {
             <div style={{ fontSize: 11, color: "#8B949E", fontFamily: "IBM Plex Mono, monospace", marginTop: 3 }}>{datasetName} · {taskLabel}</div>
           </div>
         </div>
+        <button
+          onClick={onDownloadSynthetic}
+          disabled={downloading || !run?.syntheticDataS3Key}
+          style={{
+            height: 34,
+            borderRadius: 9,
+            border: "1px solid #DBEAFE",
+            background: downloading ? "#BFDBFE" : "#EFF6FF",
+            color: "#0969DA",
+            fontSize: 11.5,
+            fontFamily: "IBM Plex Mono, monospace",
+            fontWeight: 700,
+            padding: "0 12px",
+            cursor: downloading || !run?.syntheticDataS3Key ? "not-allowed" : "pointer",
+            opacity: !run?.syntheticDataS3Key ? 0.55 : 1,
+            whiteSpace: "nowrap",
+          }}
+          title={!run?.syntheticDataS3Key ? "Synthetic dataset not available for this run" : "Download stored synthetic dataset"}
+        >
+          {downloading ? "Downloading..." : "Download Dataset"}
+        </button>
       </div>
+
+      {downloadError && (
+        <div style={{ fontSize: 11, color: "#DC2626", fontFamily: "IBM Plex Mono, monospace" }}>
+          {downloadError}
+        </div>
+      )}
 
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(124px, 1fr))", gap: 8 }}>
         {[
@@ -235,29 +326,113 @@ function SummaryStrip({ events, baseTs, datasetName, taskLabel, run, onBack }: {
 }
 
 function ExpandedDetail({ event, idx, baseTs }: { event: AuditEvent; idx: number; baseTs: string }) {
+  const [tab, setTab] = useState<"message" | "json">("message");
+
+  // Separate the readable message from the raw payload.
+  // The detail string is built as `${message}\n\nPayload:\n${JSON.stringify(payload)}`
+  // so we split on that sentinel. If there's no payload section, the whole
+  // string is the message.
+  const sentinelIdx = event.detail.indexOf("\n\nPayload:\n");
+  const message = sentinelIdx !== -1
+    ? event.detail.slice(0, sentinelIdx).trim()
+    : event.detail.trim();
+
+  // Prefer the structured payload object; fall back to parsing the inline text.
+  let jsonValue: unknown = event.payload ?? null;
+  if (!jsonValue && sentinelIdx !== -1) {
+    try { jsonValue = JSON.parse(event.detail.slice(sentinelIdx + "\n\nPayload:\n".length).trim()); }
+    catch { jsonValue = null; }
+  }
+
+  // Always produce a JSON view — augment with event metadata so the JSON tab
+  // is a complete, self-contained record even when there's no structured payload.
+  const enrichedJson = {
+    event: {
+      index:    idx + 1,
+      ts:       event.ts,
+      elapsed:  elapsed(event.ts, baseTs),
+      agent:    event.agent,
+      action:   event.action,
+      resource: event.resource,
+      severity: event.severity,
+      outcome:  event.outcome,
+    },
+    ...(jsonValue && typeof jsonValue === "object" && !Array.isArray(jsonValue)
+      ? (jsonValue as Record<string, unknown>)
+      : jsonValue !== null ? { payload: jsonValue } : {}),
+  };
+  const jsonString = JSON.stringify(enrichedJson, null, 2);
+
+  const TAB_STYLE = (active: boolean) => ({
+    padding: "6px 14px",
+    border: "none",
+    background: "none",
+    cursor: "pointer",
+    fontFamily: "IBM Plex Mono, monospace",
+    fontSize: 11,
+    fontWeight: active ? 700 : 500,
+    color: active ? "#0969DA" : "#8B949E",
+    borderBottom: `2px solid ${active ? "#0969DA" : "transparent"}`,
+    marginBottom: -1,
+    transition: "all 0.12s",
+  } as React.CSSProperties);
+
   return (
     <tr>
       <td colSpan={7} style={{ padding: 0, borderBottom: "2px solid #E1E4E8" }}>
-        <div style={{ background: "linear-gradient(to bottom, #F6F8FA, #fff)", padding: "14px 20px 16px 56px", display: "grid", gridTemplateColumns: "1fr auto auto", gap: "0 32px", alignItems: "start" }}>
-          <div>
-            <div style={{ fontSize: 9.5, fontFamily: "IBM Plex Mono, monospace", color: "#B1BAC4", textTransform: "uppercase", letterSpacing: "0.09em", marginBottom: 5 }}>Event Detail</div>
-            <p style={{ fontSize: 13, fontFamily: "IBM Plex Sans, sans-serif", color: "#24292F", lineHeight: 1.6, margin: 0 }}>{event.detail}</p>
+        <div style={{ background: "linear-gradient(to bottom, #F6F8FA, #fff)" }}>
+
+          {/* Tab bar */}
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", borderBottom: "1px solid #E1E4E8", padding: "0 20px 0 56px" }}>
+            <div style={{ display: "flex", gap: 0 }}>
+              <button style={TAB_STYLE(tab === "message")} onClick={() => setTab("message")}>Message</button>
+              <button style={TAB_STYLE(tab === "json")} onClick={() => setTab("json")}>JSON</button>
+            </div>
+            {/* Timestamp + event # pinned right */}
+            <div style={{ display: "flex", alignItems: "center", gap: 24, paddingBottom: 1 }}>
+              <div style={{ textAlign: "right" }}>
+                <div style={{ fontSize: 10, fontFamily: "IBM Plex Mono, monospace", color: "#B1BAC4", textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 2 }}>Timestamp (UTC)</div>
+                <div style={{ fontSize: 11.5, fontFamily: "IBM Plex Mono, monospace", color: "#24292F", fontWeight: 600 }}>{fmtTs(event.ts)}</div>
+                <div style={{ fontSize: 10.5, fontFamily: "IBM Plex Mono, monospace", color: "#8B949E" }}>{elapsed(event.ts, baseTs)}</div>
+              </div>
+              <div style={{ textAlign: "right" }}>
+                <div style={{ fontSize: 10, fontFamily: "IBM Plex Mono, monospace", color: "#B1BAC4", textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 2 }}>Event #</div>
+                <div style={{ fontSize: 22, fontFamily: "IBM Plex Mono, monospace", color: "#E1E4E8", fontWeight: 700, lineHeight: 1 }}>{String(idx + 1).padStart(2, "0")}</div>
+              </div>
+            </div>
           </div>
-          <div style={{ textAlign: "right" }}>
-            <div style={{ fontSize: 9.5, fontFamily: "IBM Plex Mono, monospace", color: "#B1BAC4", textTransform: "uppercase", letterSpacing: "0.09em", marginBottom: 5 }}>Timestamp (UTC)</div>
-            <div style={{ fontSize: 12, fontFamily: "IBM Plex Mono, monospace", color: "#24292F", fontWeight: 600 }}>{fmtTs(event.ts)}</div>
-            <div style={{ fontSize: 11, fontFamily: "IBM Plex Mono, monospace", color: "#8B949E", marginTop: 2 }}>{elapsed(event.ts, baseTs)}</div>
-          </div>
-          <div style={{ textAlign: "right" }}>
-            <div style={{ fontSize: 9.5, fontFamily: "IBM Plex Mono, monospace", color: "#B1BAC4", textTransform: "uppercase", letterSpacing: "0.09em", marginBottom: 5 }}>Event #</div>
-            <div style={{ fontSize: 22, fontFamily: "IBM Plex Mono, monospace", color: "#E1E4E8", fontWeight: 700, lineHeight: 1 }}>{String(idx + 1).padStart(2, "0")}</div>
+
+          {/* Tab content */}
+          <div style={{ padding: "14px 20px 16px 56px" }}>
+            {tab === "message" && (
+              <p style={{ fontSize: 13, fontFamily: "IBM Plex Sans, sans-serif", color: "#24292F", lineHeight: 1.6, margin: 0 }}>
+                {message || <span style={{ color: "#B1BAC4", fontStyle: "italic" }}>No message.</span>}
+              </p>
+            )}
+
+            {tab === "json" && (
+              <div style={{ background: "#0D1117", borderRadius: 9, padding: "12px 14px", overflowX: "auto" }}>
+                <pre style={{ margin: 0, fontSize: 12, fontFamily: "IBM Plex Mono, monospace", color: "#C9D1D9", lineHeight: 1.6, whiteSpace: "pre-wrap", wordBreak: "break-word" }}>
+                  {jsonString.split("\n").map((line, i) => {
+                    // Simple syntax colouring: keys, strings, numbers, booleans/null
+                    const coloured = line
+                      .replace(/("[\w\s]+")\s*:/g,       '<span style="color:#79C0FF">$1</span>:')
+                      .replace(/:\s*(".*?")/g,            ': <span style="color:#A5D6FF">$1</span>')
+                      .replace(/:\s*(\d+\.?\d*)/g,        ': <span style="color:#F97583">$1</span>')
+                      .replace(/:\s*(true|false|null)/g,  ': <span style="color:#FFAB70">$1</span>');
+                    return (
+                      <span key={i} dangerouslySetInnerHTML={{ __html: coloured + "\n" }} />
+                    );
+                  })}
+                </pre>
+              </div>
+            )}
           </div>
         </div>
       </td>
     </tr>
   );
 }
-
 function FilterMenu({ title, items, selected, onToggle }: { title: string; items: Array<{ value: string; label: string; color: string; dot?: string }>; selected: string[]; onToggle: (value: string) => void }) {
   const allSelected = selected.length === items.length;
   return (
@@ -328,6 +503,8 @@ export default function Logs({ datasetId: propDatasetId, runId: propRunId }: { d
   const [search, setSearch] = useState("");
   const [expanded, setExpanded] = useState<number | null>(null);
   const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
+  const [downloading, setDownloading] = useState(false);
+  const [downloadError, setDownloadError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!datasetId || !runId) return;
@@ -389,9 +566,50 @@ export default function Logs({ datasetId: propDatasetId, runId: propRunId }: { d
     return <div style={{ fontFamily: "IBM Plex Mono, monospace", color: "#DC2626", padding: 24 }}>{error}</div>;
   }
 
+  const handleDownloadSynthetic = async () => {
+    if (!datasetId || !runId) return;
+
+    setDownloading(true);
+    setDownloadError(null);
+
+    try {
+      const response = await fetch(`${API_BASE}/agents/${datasetId}/runs/${runId}/download-synthetic`);
+      const data = await response.json().catch(() => ({}));
+
+      if (!response.ok) {
+        const message =
+          typeof data?.message === "string"
+            ? data.message
+            : `Failed to download synthetic dataset (${response.status})`;
+        throw new Error(message);
+      }
+
+      const downloadUrl = typeof data?.downloadUrl === "string" ? data.downloadUrl : "";
+      if (!downloadUrl) {
+        throw new Error("Synthetic download URL is missing");
+      }
+
+      window.open(downloadUrl, "_blank", "noopener,noreferrer");
+    } catch (e) {
+      setDownloadError(e instanceof Error ? e.message : "Failed to download synthetic dataset");
+    } finally {
+      setDownloading(false);
+    }
+  };
+
   return (
     <div style={{ fontFamily: "IBM Plex Sans, sans-serif", background: "#F4F5F7", minHeight: "100vh", padding: "24px 28px" }}>
-      <SummaryStrip events={rawEvents} baseTs={baseTs} datasetName={datasetName} taskLabel={taskLabel} run={run} onBack={() => router.push("/Audit-Log")} />
+      <SummaryStrip
+        events={rawEvents}
+        baseTs={baseTs}
+        datasetName={datasetName}
+        taskLabel={taskLabel}
+        run={run}
+        onBack={() => router.push("/")}
+        onDownloadSynthetic={handleDownloadSynthetic}
+        downloading={downloading}
+        downloadError={downloadError}
+      />
       <FilterBar filters={filters} setFilters={setFilters} search={search} setSearch={setSearch} shown={filtered.length} total={rawEvents.length} />
 
       <div style={{ background: "#fff", border: "1px solid #E1E4E8", borderRadius: 14, boxShadow: "0 1px 4px rgba(0,0,0,0.05)", overflow: "hidden" }}>

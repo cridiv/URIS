@@ -15,6 +15,7 @@ def run_pipeline(
     target_column: Optional[str] = None,
     event_emitter: Optional[Any] = None,
     enable_validation: bool = False,
+    policy_config: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
     """
     Full URIS pipeline:
@@ -36,6 +37,8 @@ def run_pipeline(
             dataset_path=dataset_path,
             task_type=task_type,
             target_column=target_column,
+            policy_config=policy_config,
+            event_emitter=event_emitter,
         )
 
         if evaluation_result["status"] == "error":

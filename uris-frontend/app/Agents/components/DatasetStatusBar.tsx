@@ -77,6 +77,10 @@ export default function DatasetStatusBar({ dataset, currentRun }: DatasetStatusB
       >
         {/* Back Button */}
         <button
+          onClick={() => {
+            window.location.href = "/";
+          }}
+          aria-label="Back to initial page"
           style={{
             width: 34,
             height: 34,

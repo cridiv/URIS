@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { GetObjectCommand, S3Client } from '@aws-sdk/client-s3';
 import FormData = require('form-data');
@@ -7,6 +7,14 @@ import { Readable } from 'stream';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { S3StorageService } from '../aws/s3.storage';
+import { PolicyService } from '../policy/policy.service';
+
+interface AgentReasoningEvent {
+  type: 'agent_start' | 'agent_data' | 'agent_complete';
+  agent: string;
+  ts?: number;
+  payload?: Record<string, unknown>;
+}
 
 @Injectable()
 export class AgentsService {
@@ -17,6 +25,7 @@ export class AgentsService {
     private readonly prisma: PrismaService,
     private readonly config: ConfigService,
     private readonly storage: S3StorageService,
+    private readonly policyService: PolicyService,
   ) {
     this.agentsUrl = config.get<string>('app.agentsUrl') ?? 'http://localhost:8000';
     this.s3Client = new S3Client({
@@ -133,6 +142,16 @@ export class AgentsService {
       );
       form.append('target_column', 'None');
 
+      // Attach latest policy config for this dataset (if present) so
+      // evaluation/compliance receives directives during the actual run.
+      const policyConfig = this.policyService.getPolicyConfig(dataset.id);
+      if (policyConfig) {
+        form.append('policy_config', JSON.stringify(policyConfig));
+        console.log(
+          `[AgentsService] Attached policy config (${policyConfig.resolved_directives.length} directives)`,
+        );
+      }
+
       // Get base URL for callback (use override from header if provided)
       const backendUrl = overrideBackendUrl ?? this.config.get<string>('app.backendUrl') ?? 'http://localhost:5000';
 
@@ -247,6 +266,65 @@ export class AgentsService {
     }
 
     return run;
+  }
+
+  /**
+   * Persist every agent event so audit log can render full payload history,
+   * not only the compact pipeline trace.
+   */
+  async recordRunEvent(
+    datasetId: string,
+    runId: string,
+    event: AgentReasoningEvent,
+  ): Promise<void> {
+    const run = await this.prisma.agentRun.findFirst({
+      where: {
+        id: runId,
+        datasetId,
+      },
+      select: {
+        id: true,
+        analysis: true,
+      },
+    });
+
+    if (!run) {
+      return;
+    }
+
+    const analysis =
+      run.analysis && typeof run.analysis === 'object' && !Array.isArray(run.analysis)
+        ? { ...(run.analysis as Record<string, unknown>) }
+        : {};
+
+    const existingEventsRaw = analysis.audit_events;
+    const existingEvents = Array.isArray(existingEventsRaw)
+      ? [...existingEventsRaw]
+      : [];
+
+    const tsIso =
+      typeof event.ts === 'number' && Number.isFinite(event.ts)
+        ? new Date(event.ts).toISOString()
+        : new Date().toISOString();
+
+    const normalizedEvent: Record<string, unknown> = {
+      type: event.type,
+      agent: event.agent,
+      ts: tsIso,
+      payload: event.payload ?? {},
+    };
+
+    const MAX_AUDIT_EVENTS = 5000;
+    const nextEvents = [...existingEvents, normalizedEvent].slice(-MAX_AUDIT_EVENTS);
+    analysis.audit_events = nextEvents;
+
+    await this.prisma.agentRun.update({
+      where: { id: runId },
+      data: {
+        analysis: analysis as Prisma.InputJsonValue,
+        updatedAt: new Date(),
+      },
+    });
   }
 
   private async streamToBuffer(stream: Readable): Promise<Buffer> {
@@ -516,6 +594,44 @@ export class AgentsService {
       analysis: run.analysis,
       syntheticDataS3Key: run.syntheticDataS3Key,
       run,
+    };
+  }
+
+  /**
+   * Return a presigned URL for previously generated synthetic data.
+   */
+  async getSyntheticDownload(
+    datasetId: string,
+    runId: string,
+  ) {
+    const run = await this.prisma.agentRun.findFirst({
+      where: {
+        id: runId,
+        datasetId,
+      },
+    });
+
+    if (!run) {
+      throw new NotFoundException(`Run ${runId} for dataset ${datasetId} not found`);
+    }
+
+    if (!run.syntheticDataS3Key) {
+      throw new BadRequestException(
+        `No stored synthetic dataset found for run ${runId}`,
+      );
+    }
+
+    const downloadUrl = await this.storage.getPresignedDownloadUrl(
+      run.syntheticDataS3Key,
+      3600,
+    );
+
+    return {
+      status: 'success',
+      runId,
+      datasetId,
+      syntheticDataS3Key: run.syntheticDataS3Key,
+      downloadUrl,
     };
   }
 }
