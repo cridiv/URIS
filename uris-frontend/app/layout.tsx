@@ -1,6 +1,7 @@
 "use client";
 
 import "./globals.css";
+import { usePathname } from "next/navigation";
 import { SidebarProvider, useSidebar } from "./components/Sidebar";
 import Navbar from "./components/Navbar";
 import Sidebar from "./components/Sidebar";
@@ -8,6 +9,14 @@ import Sidebar from "./components/Sidebar";
 
 function LayoutContent({ children }: { children: React.ReactNode }) {
   const { isOpen } = useSidebar();
+  const pathname = usePathname();
+  const normalizedPath = pathname.toLowerCase();
+  const hideAppChrome = normalizedPath === "/" || normalizedPath === "/signin" || normalizedPath === "/auth/callback";
+
+  if (hideAppChrome) {
+    return <>{children}</>;
+  }
+
   return (
     <div 
       style={{
@@ -29,11 +38,15 @@ export default function RootLayout({
 }: {
   children: React.ReactNode;
 }) {
+  const pathname = usePathname();
+  const normalizedPath = pathname.toLowerCase();
+  const hideAppChrome = normalizedPath === "/" || normalizedPath === "/signin" || normalizedPath === "/auth/callback";
+
   return (
     <html lang="en">
       <body>
         <SidebarProvider>
-          <Sidebar />
+          {!hideAppChrome && <Sidebar />}
           <LayoutContent>{children}</LayoutContent>
         </SidebarProvider>
       </body>
