@@ -343,7 +343,7 @@ function HeroSection() {
             margin: "0 0 36px", maxWidth: 460,
             fontFamily: "IBM Plex Sans, sans-serif", fontWeight: 400,
           }}>
-            A 4-agent AI pipeline that evaluates data quality, enforces your privacy policy, and synthesises production-ready datasets without exposing a single PII field.
+            A Multi-agent AI pipeline that evaluates data quality, enforces your privacy policy, and synthesises production-ready datasets without exposing a single PII field.
           </p>
 
           {/* CTAs — two evenly spaced */}

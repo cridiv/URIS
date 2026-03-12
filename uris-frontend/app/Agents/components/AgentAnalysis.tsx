@@ -353,7 +353,7 @@ function ComplianceResult({ payload }) {
   );
 }
 
-function SynthesisResult({ payload, datasetId, runId, onAnalysisSaved }) {
+function SynthesisResult({ payload, datasetId, runId, onAnalysisSaved, existingSyntheticDataS3Key }) {
   const [generating, setGenerating] = useState(false);
   const [generatedFile, setGeneratedFile] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -371,7 +371,9 @@ function SynthesisResult({ payload, datasetId, runId, onAnalysisSaved }) {
   const correlationDrift = synthesisPayload?.correlation_drift
     ?? synthesisPayload?.correlation_report?.drift_metrics
     ?? null;
-  const traceAttempts = Array.isArray(synthesisPayload?.trace_attempts) ? synthesisPayload.trace_attempts : [];
+  const traceAttempts = Array.isArray(synthesisPayload?.trace_attempts)
+    ? synthesisPayload.trace_attempts
+    : deriveAttemptTraceFromLines(Array.isArray(synthesisPayload?.trace) ? synthesisPayload.trace : []);
 
   const rowsBefore = typeof synthesisReport?.rows_before === 'number' ? synthesisReport.rows_before : null;
   const rowsGenerated = typeof synthesisReport?.rows_generated === 'number'
@@ -434,10 +436,12 @@ function SynthesisResult({ payload, datasetId, runId, onAnalysisSaved }) {
     
     try {
       const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:5000';
-      const response = await fetch(`${API_BASE}/agents/${datasetId}/runs/${runId}/generate-synthetic`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-      });
+      const response = existingSyntheticDataS3Key
+        ? await fetch(`${API_BASE}/agents/${datasetId}/runs/${runId}/download-synthetic`)
+        : await fetch(`${API_BASE}/agents/${datasetId}/runs/${runId}/generate-synthetic`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+          });
       
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({}));
@@ -458,6 +462,8 @@ function SynthesisResult({ payload, datasetId, runId, onAnalysisSaved }) {
       setIsFallbackDownload(Boolean(result.isFallback));
       if (typeof result.message === 'string' && result.message.trim().length > 0) {
         setResultMessage(result.message);
+      } else if (existingSyntheticDataS3Key) {
+        setResultMessage('Stored synthetic dataset loaded successfully.');
       }
       if (result.isFallback && typeof result.failureReason === 'string' && result.failureReason.trim().length > 0) {
         setError(result.failureReason);
@@ -554,7 +560,7 @@ function SynthesisResult({ payload, datasetId, runId, onAnalysisSaved }) {
       <SectionHead>Attempt Trace</SectionHead>
       {traceAttempts.length > 0 ? (
         traceAttempts.map((t, i) => (
-          <div key={i} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", background: i === 1 ? "#F0FDF4" : "#FEF2F2", border: `1px solid ${i === 1 ? "#D1FAE5" : "#FEE2E2"}`, borderRadius: 7, padding: "6px 10px", marginBottom: 5 }}>
+          <div key={i} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", background: t.privacy === "pass" && t.correlation === "pass" ? "#F0FDF4" : "#FEF2F2", border: `1px solid ${t.privacy === "pass" && t.correlation === "pass" ? "#D1FAE5" : "#FEE2E2"}`, borderRadius: 7, padding: "6px 10px", marginBottom: 5 }}>
             <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
               <span style={{ fontSize: 10, fontFamily: "IBM Plex Mono, monospace", fontWeight: 700, color: "#8B949E" }}>#{t.attempt}</span>
               <span style={{ fontSize: 11, fontFamily: "IBM Plex Mono, monospace", color: "#57606A" }}>budget={t.budget}</span>
@@ -631,7 +637,7 @@ function SynthesisResult({ payload, datasetId, runId, onAnalysisSaved }) {
               <polyline points="7 10 12 15 17 10" />
               <line x1="12" y1="15" x2="12" y2="3" />
             </svg>
-            Generate Synthetic Data
+            {existingSyntheticDataS3Key ? 'Download Synthetic Data' : 'Generate Synthetic Data'}
           </button>
         )}
         
@@ -757,7 +763,7 @@ function Arrow({ from }) {
 }
 
 // ── Agent block ───────────────────────────────────────────────────────────────
-function AgentBlock({ agentKey, agentState, datasetId, runId, onAnalysisSaved }) {
+function AgentBlock({ agentKey, agentState, datasetId, runId, onAnalysisSaved, existingSyntheticDataS3Key }) {
   const { status, logs, result } = agentState;
   const ResultRenderer = RESULT_RENDERERS[agentKey];
   const isQueued = status === "queued";
@@ -793,7 +799,7 @@ function AgentBlock({ agentKey, agentState, datasetId, runId, onAnalysisSaved })
               <svg width="11" height="11" viewBox="0 0 24 24" fill="none"><path d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" stroke="#34D399" strokeWidth="2" strokeLinecap="round"/></svg>
               <span style={{ fontSize: 10, fontFamily: "IBM Plex Mono, monospace", fontWeight: 700, color: "#047857", textTransform: "uppercase", letterSpacing: "0.08em" }}>Agent Output</span>
             </div>
-            <ResultRenderer payload={result} datasetId={datasetId} runId={runId} onAnalysisSaved={onAnalysisSaved} />
+            <ResultRenderer payload={result} datasetId={datasetId} runId={runId} onAnalysisSaved={onAnalysisSaved} existingSyntheticDataS3Key={existingSyntheticDataS3Key} />
           </div>
         )}
       </div>
@@ -819,6 +825,7 @@ interface AgentAnalysisProps {
     createdAt: string;
     result?: Record<string, unknown> | null;
     errorMsg?: string | null;
+    syntheticDataS3Key?: string | null;
   } | null;
   onRunCreated?: (run: {
     id: string;
@@ -942,6 +949,50 @@ function normalizeAgentResult(agentKey: string, payload: Record<string, unknown>
   return direct;
 }
 
+function deriveAttemptTraceFromLines(lines: string[]): Array<{ attempt: number; budget: number | null; privacy: string; correlation: string }> {
+  const attempts: Array<{ attempt: number; budget: number | null; privacy: string; correlation: string }> = [];
+  let current: { attempt: number; budget: number | null; privacy: string; correlation: string } | null = null;
+
+  for (const rawLine of lines) {
+    const line = rawLine.trim();
+    const attemptMatch = line.match(/^Attempt\s+(\d+)\/\d+\s+[-—]\s+budget=(\d+)/i);
+
+    if (attemptMatch) {
+      if (current) {
+        attempts.push(current);
+      }
+
+      current = {
+        attempt: Number(attemptMatch[1]),
+        budget: Number(attemptMatch[2]),
+        privacy: 'queued',
+        correlation: 'queued',
+      };
+      continue;
+    }
+
+    if (!current) {
+      continue;
+    }
+
+    if (/privacy check:\s*pass/i.test(line)) {
+      current.privacy = 'pass';
+    } else if (/privacy check:\s*fail/i.test(line)) {
+      current.privacy = 'fail';
+    } else if (/correlation check:\s*pass/i.test(line)) {
+      current.correlation = 'pass';
+    } else if (/correlation check:\s*fail/i.test(line)) {
+      current.correlation = 'fail';
+    }
+  }
+
+  if (current) {
+    attempts.push(current);
+  }
+
+  return attempts;
+}
+
 export default function PipelineLog({ dataset, currentRun, onRunCreated }: AgentAnalysisProps) {
   const [agents, setAgents] = useState(() =>
     Object.fromEntries(AGENT_ORDER.map(k => [k, { status: "queued", logs: [], result: null }]))
@@ -953,10 +1004,12 @@ export default function PipelineLog({ dataset, currentRun, onRunCreated }: Agent
   const timerRef = useRef<NodeJS.Timeout | null>(null);
   const socketRef = useRef<Socket | null>(null);
   const socketRunKeyRef = useRef<string | null>(null);
+  const hydratedRunSignatureRef = useRef<string | null>(null);
   const [isConnected, setIsConnected] = useState(false);
 
   useEffect(() => {
     if (!currentRun) {
+      hydratedRunSignatureRef.current = null;
       setStarted(false);
       setDone(false);
       setElapsed(0);
@@ -964,7 +1017,22 @@ export default function PipelineLog({ dataset, currentRun, onRunCreated }: Agent
       return;
     }
 
+    const runStatus = (currentRun.status ?? '').toLowerCase();
     const runResult = (currentRun.result as Record<string, unknown> | undefined) ?? undefined;
+    const resultKeys = runResult ? Object.keys(runResult).sort().join('|') : '';
+    const nextHydrationSignature = `${currentRun.id}:${runStatus}:${currentRun.updatedAt ?? ''}:${resultKeys}`;
+
+    if (hydratedRunSignatureRef.current === nextHydrationSignature) {
+      return;
+    }
+
+    const shouldHydrateFromStoredResult = runStatus === 'completed' || runStatus === 'failed' || Boolean(runResult);
+    if (!shouldHydrateFromStoredResult) {
+      return;
+    }
+
+    hydratedRunSignatureRef.current = nextHydrationSignature;
+
     const pipelineResult =
       ((runResult?.pipeline_result as Record<string, unknown> | undefined) ?? runResult);
     if (!pipelineResult || typeof pipelineResult !== "object") return;
@@ -1259,6 +1327,7 @@ export default function PipelineLog({ dataset, currentRun, onRunCreated }: Agent
                     onAnalysisSaved={(analysis) => {
                       console.log('Analysis saved for agent:', key, analysis);
                     }}
+                    existingSyntheticDataS3Key={currentRun?.syntheticDataS3Key ?? null}
                   />
                   {i < AGENT_ORDER.length - 1 && agents[key].status === "complete" && <Arrow from={key} />}
                   {i < AGENT_ORDER.length - 1 && agents[key].status !== "complete" && <div style={{ height: 12 }} />}

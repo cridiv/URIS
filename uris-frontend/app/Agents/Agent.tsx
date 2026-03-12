@@ -35,6 +35,7 @@ interface AgentRun {
   updatedAt?: string;
   result?: Record<string, unknown> | null;
   errorMsg?: string | null;
+  syntheticDataS3Key?: string | null;
 }
 
 interface AgentsViewProps {
@@ -51,6 +52,10 @@ export default function AgentsView({ datasetId, initialRunId }: AgentsViewProps)
   const [dataset, setDataset] = useState<Dataset | null>(null);
 
   const activeDatasetId = datasetId ?? null;
+  const hasInFlightRun = runs.some((run) => {
+    const status = (run.status ?? '').toLowerCase();
+    return status === 'analyzing' || status === 'running';
+  });
 
   useEffect(() => {
     if (!activeDatasetId) return;
@@ -145,11 +150,6 @@ export default function AgentsView({ datasetId, initialRunId }: AgentsViewProps)
   useEffect(() => {
     if (!activeDatasetId) return;
 
-    const hasInFlightRun = runs.some((run) => {
-      const status = (run.status ?? '').toLowerCase();
-      return status === 'analyzing' || status === 'running';
-    });
-
     if (!hasInFlightRun) return;
 
     const interval = setInterval(async () => {
@@ -166,7 +166,7 @@ export default function AgentsView({ datasetId, initialRunId }: AgentsViewProps)
     }, 2500);
 
     return () => clearInterval(interval);
-  }, [activeDatasetId, runs]);
+  }, [activeDatasetId, hasInFlightRun]);
 
   if (!activeDatasetId) {
     return (

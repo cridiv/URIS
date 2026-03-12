@@ -208,11 +208,24 @@ export class AgentsService {
           : typeof privacyRisk === 'string'
             ? Number(privacyRisk)
             : null;
+      const complianceStatusRaw =
+        (typeof compliance.status === 'string' && compliance.status) ||
+        (typeof (compliance.privacy_report as Record<string, unknown> | undefined)?.status === 'string'
+          ? ((compliance.privacy_report as Record<string, unknown>).status as string)
+          : null) ||
+        (typeof (compliance.correlation_report as Record<string, unknown> | undefined)?.status === 'string'
+          ? ((compliance.correlation_report as Record<string, unknown>).status as string)
+          : null);
+      const normalizedComplianceStatus = complianceStatusRaw?.toLowerCase();
 
       const runFailed =
         pipelineStatus.includes('error') ||
         pipelineStatus.includes('failed') ||
         validationVerdict === 'reject';
+
+      const syntheticDataS3Key = runFailed
+        ? null
+        : await this.persistSyntheticArtifact(result, dataset.id, runId);
 
       await this.prisma.agentRun.update({
         where: { id: runId },
@@ -220,11 +233,16 @@ export class AgentsService {
           status: runFailed ? 'failed' : 'completed',
           adfiScore,
           complianceStatus:
-            privacyRiskScore === null
-              ? null
-              : privacyRiskScore <= 0.35
-                ? 'passed'
-                : 'failed',
+            normalizedComplianceStatus === 'pass' || normalizedComplianceStatus === 'passed'
+              ? 'passed'
+              : normalizedComplianceStatus === 'fail' || normalizedComplianceStatus === 'failed'
+                ? 'failed'
+                : privacyRiskScore === null
+                  ? null
+                  : privacyRiskScore <= 0.35
+                    ? 'passed'
+                    : 'failed',
+          syntheticDataS3Key,
           result: result as object,
         },
       });
@@ -336,6 +354,58 @@ export class AgentsService {
     });
   }
 
+  private extractDownloadUrl(result: Record<string, unknown>): string | null {
+    if (typeof result.download_url === 'string') {
+      return result.download_url;
+    }
+
+    if (
+      result.pipeline_result &&
+      typeof (result.pipeline_result as Record<string, unknown>).download_url === 'string'
+    ) {
+      return (result.pipeline_result as Record<string, unknown>).download_url as string;
+    }
+
+    return null;
+  }
+
+  private async persistSyntheticArtifact(
+    result: Record<string, unknown>,
+    datasetId: string,
+    runId: string,
+  ): Promise<string | null> {
+    const relDownloadUrl = this.extractDownloadUrl(result);
+
+    if (!relDownloadUrl) {
+      return null;
+    }
+
+    const downloadUrl = relDownloadUrl.startsWith('http')
+      ? relDownloadUrl
+      : `${this.agentsUrl}${relDownloadUrl.startsWith('/') ? '' : '/'}${relDownloadUrl}`;
+
+    const csvResponse = await fetch(downloadUrl);
+    if (!csvResponse.ok) {
+      throw new Error(
+        `Failed to download synthetic CSV from ${downloadUrl}: ${csvResponse.status} ${csvResponse.statusText}`,
+      );
+    }
+
+    const csvBuffer = await (csvResponse.buffer() as Promise<Buffer>);
+    if (!csvBuffer || csvBuffer.length === 0) {
+      throw new Error('Downloaded CSV file is empty');
+    }
+
+    const syntheticS3Key = `synthetic/${datasetId}/${runId}/augmented_dataset.csv`;
+    const { s3Key: uploadedKey } = await this.storage.upload(
+      csvBuffer,
+      syntheticS3Key,
+      'text/csv',
+    );
+
+    return uploadedKey;
+  }
+
   /**
    * Generate synthetic data based on synthesis agent results
    */
@@ -366,6 +436,63 @@ export class AgentsService {
 
     if (!dataset) {
       throw new NotFoundException(`Dataset ${datasetId} not found`);
+    }
+
+    if (run.syntheticDataS3Key) {
+      const downloadUrl = await this.storage.getPresignedDownloadUrl(
+        run.syntheticDataS3Key,
+        3600,
+      );
+
+      return {
+        status: 'success',
+        message: 'Stored synthetic data loaded successfully',
+        downloadUrl,
+        syntheticDataS3Key: run.syntheticDataS3Key,
+        runId,
+        datasetId,
+      };
+    }
+
+    const existingRunResult =
+      run.result && typeof run.result === 'object'
+        ? (run.result as Record<string, unknown>)
+        : null;
+
+    if (existingRunResult && this.extractDownloadUrl(existingRunResult)) {
+      try {
+        const uploadedKey = await this.persistSyntheticArtifact(
+          existingRunResult,
+          datasetId,
+          runId,
+        );
+
+        if (uploadedKey) {
+          await this.prisma.agentRun.update({
+            where: { id: runId },
+            data: {
+              syntheticDataS3Key: uploadedKey,
+              updatedAt: new Date(),
+            },
+          });
+
+          const downloadUrl = await this.storage.getPresignedDownloadUrl(uploadedKey, 3600);
+
+          return {
+            status: 'success',
+            message: 'Synthetic data loaded from the completed orchestration run',
+            downloadUrl,
+            syntheticDataS3Key: uploadedKey,
+            runId,
+            datasetId,
+          };
+        }
+      } catch (error) {
+        console.warn(
+          `[generateSyntheticData] Failed to reuse original synthetic artifact for run ${runId}:`,
+          error,
+        );
+      }
     }
 
     const runResult = (run.result as Record<string, unknown> | null) ?? {};
@@ -468,12 +595,7 @@ export class AgentsService {
     }
     
     // Handle both direct download_url and nested in pipeline_result
-    let relDownloadUrl: string | null = null;
-    if (typeof result.download_url === 'string') {
-      relDownloadUrl = result.download_url;
-    } else if (result.pipeline_result && typeof (result.pipeline_result as Record<string, unknown>).download_url === 'string') {
-      relDownloadUrl = (result.pipeline_result as Record<string, unknown>).download_url as string;
-    }
+    const relDownloadUrl = this.extractDownloadUrl(result);
 
     if (!relDownloadUrl) {
       console.error('Python response:', JSON.stringify(result, null, 2));
