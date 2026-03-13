@@ -21,7 +21,11 @@ type AgentRuntimeState = { status: AgentStatus; logs: AgentLogEntry[]; result: R
 function createInitialAgents(): Record<AgentKey, AgentRuntimeState> {
   return Object.fromEntries(
     AGENT_ORDER.map((k) => [k, { status: "queued", logs: [], result: null }]),
-  ) as Record<AgentKey, AgentRuntimeState>;
+  ) as unknown as Record<AgentKey, AgentRuntimeState>;
+}
+
+function isAgentKey(value: string): value is AgentKey {
+  return AGENT_ORDER.includes(value as AgentKey);
 }
 
 // ── Primitives ────────────────────────────────────────────────────────────────
@@ -659,7 +663,9 @@ function SynthesisResult({ payload, datasetId, runId, onAnalysisSaved, existingS
         ))
       ) : synthesisPayload?.correlation_report?.status === "skip" ? (
         <div style={{ fontSize: 11, color: "#8B949E", padding: "8px 0", fontStyle: "italic" }}>
-          {synthesisPayload.correlation_report.details || "No numeric columns available for correlation check"}
+          {typeof synthesisPayload.correlation_report?.details === "string"
+            ? synthesisPayload.correlation_report.details
+            : "No numeric columns available for correlation check"}
         </div>
       ) : (
         <div style={{ fontSize: 11, color: "#8B949E", padding: "8px 0", fontStyle: "italic" }}>No correlation data available</div>
@@ -886,7 +892,7 @@ function AgentBlock({ agentKey, agentState, datasetId, runId, onAnalysisSaved, e
     runId?: string;
     onAnalysisSaved?: (analysis: { synthesis: Record<string, unknown>; syntheticDataS3Key?: string | null }) => void;
     existingSyntheticDataS3Key?: string | null;
-  }) => JSX.Element;
+  }) => ReactNode;
   const isQueued = status === "queued";
 
   return (
@@ -1071,9 +1077,9 @@ function normalizeAgentResult(agentKey: string, payload: Record<string, unknown>
   return direct;
 }
 
-function deriveAttemptTraceFromLines(lines: string[]): Array<{ attempt: number; budget: number | null; privacy: string; correlation: string }> {
-  const attempts: Array<{ attempt: number; budget: number | null; privacy: string; correlation: string }> = [];
-  let current: { attempt: number; budget: number | null; privacy: string; correlation: string } | null = null;
+function deriveAttemptTraceFromLines(lines: string[]): AttemptTrace[] {
+  const attempts: AttemptTrace[] = [];
+  let current: AttemptTrace | null = null;
 
   for (const rawLine of lines) {
     const line = rawLine.trim();
@@ -1261,14 +1267,15 @@ export default function PipelineLog({ dataset, currentRun, onRunCreated }: Agent
 
       socket.on("agent_event", (event: AgentEvent) => {
         console.log("📨 Agent event received:", event);
-        // Update agent state based on event
         const { type, payload } = event;
-        const agent = event.agent === "validation" ? "synthesis" : event.agent;
+        const agentCandidate = event.agent === "validation" ? "synthesis" : event.agent;
 
-        if (!AGENT_ORDER.includes(agent)) {
+        if (!isAgentKey(agentCandidate)) {
           return;
         }
-        
+
+        const agent: AgentKey = agentCandidate;
+
         setAgents((prev) => {
           const agent_state = { ...prev[agent] };
           if (type === "agent_start") {
