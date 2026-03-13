@@ -48,13 +48,6 @@ const DatabaseIcon = () => (
   </svg>
 );
 
-const AgentsIcon = () => (
-  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-    <circle cx="12" cy="8" r="3.5" />
-    <path d="M5 20c0-3.314 3.134-6 7-6s7 2.686 7 6" />
-  </svg>
-);
-
 const AnalyticsIcon = () => (
   <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
     <path d="M3 3v18h18" />
@@ -78,10 +71,11 @@ const AuditIcon = () => (
   </svg>
 );
 
-const SettingsIcon = () => (
+const ExternalLinkIcon = () => (
   <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-    <circle cx="12" cy="12" r="3" />
-    <path d="M12 2v2m0 16v2M4.93 4.93l1.41 1.41m11.32 11.32 1.41 1.41M2 12h2m16 0h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41" />
+    <path d="M7 17 17 7" />
+    <path d="M9 7h8v8" />
+    <path d="M17 13v4a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V9a2 2 0 0 1 2-2h4" />
   </svg>
 );
 
@@ -96,7 +90,7 @@ const NAV_ITEMS: NavItem[] = [
   { id: "agents",     label: "Analysis",     icon: <AnalyticsIcon />,     href: "/Agents", section: "main" },
   { id: "policies",   label: "Policies",   icon: <PoliciesIcon />,   href: "/Policy",  section: "main"   },
   { id: "audit-log",  label: "Audit Log",  icon: <AuditIcon />,      href: "/Audit-Log", section: "main"   },
-  { id: "settings",   label: "Settings",   icon: <SettingsIcon />,   href: "/settings",  section: "bottom" },
+  { id: "docs",   label: "View Docs",   icon: <ExternalLinkIcon />,   href: "/settings",  section: "bottom" },
 ];
 
 export default function Sidebar() {

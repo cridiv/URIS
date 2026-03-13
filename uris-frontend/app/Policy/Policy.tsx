@@ -91,6 +91,27 @@ const BUILT_IN_POLICIES = [
       { verb: "DROP",       target: "col:DOB",                condition: null },
     ],
   },
+  {
+    id: "iso27001", name: "ISO-27001", fullName: "ISO/IEC 27001 Information Security Management",
+    jurisdiction: "International", icon: "🔒",
+    color: "#B45309", bg: "#FFFBEB", border: "#FDE68A",
+    description: "International standard for information security management systems (ISMS). Defines controls for protecting data confidentiality, integrity, and availability across the organisation.",
+    rules: [
+      "Classify all data assets by sensitivity — public, internal, confidential, restricted",
+      "Enforce access controls: only authorised roles may process personal or sensitive data",
+      "Maintain a complete audit trail for all data access, modification, and deletion events",
+      "Apply risk assessment before processing — block columns that exceed acceptable risk threshold",
+      "Ensure data minimisation: exclude fields not required for the stated processing purpose",
+    ],
+    tags: ["ISMS", "Data Classification", "Access Control", "Risk Assessment", "Audit Trail"],
+    enforcement: [
+      { verb: "BLOCK",      target: "any direct_identifiers", condition: "pii_type IS direct_identifier" },
+      { verb: "FLAG",       target: "any pii_columns",        condition: "reid_risk > 0.3" },
+      { verb: "MASK",       target: "any pii_columns",        condition: "pii_type IS financial" },
+      { verb: "GENERALISE", target: "any quasi_identifiers",  condition: "pii_type IS quasi_identifier" },
+      { verb: "DROP",       target: "any pii_columns",        condition: "missing_rate > 0.7" },
+    ],
+  },
 ];
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:5000";

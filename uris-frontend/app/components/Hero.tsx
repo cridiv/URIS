@@ -186,18 +186,19 @@ function Nav() {
         </a>
 
         {/* Get started — filled */}
-        <button style={{
+        <a href="/Signin" style={{
           height: 36, padding: "0 17px", borderRadius: 8,
           border: "none", background: C.primary,
           color: "#fff", fontSize: 13, fontWeight: 700,
           fontFamily: "IBM Plex Sans, sans-serif", cursor: "pointer",
           boxShadow: `0 0 18px ${C.primaryGlow}`,
           transition: "all 0.14s",
+          display: "inline-flex", alignItems: "center", textDecoration: "none",
         }}
           onMouseEnter={e => { e.currentTarget.style.background = C.primaryHover; e.currentTarget.style.boxShadow = `0 0 28px rgba(103,106,241,0.32)`; }}
           onMouseLeave={e => { e.currentTarget.style.background = C.primary; e.currentTarget.style.boxShadow = `0 0 18px ${C.primaryGlow}`; }}>
           Get started →
-        </button>
+        </a>
       </div>
     </nav>
   );
@@ -349,21 +350,22 @@ function HeroSection() {
           {/* CTAs — two evenly spaced */}
           <div style={{ display: "flex", gap: 10, alignItems: "center"}}>
             {/* Primary */}
-            <button style={{
+            <a href="/Signin" style={{
               height: 46, padding: "0 26px", borderRadius: 11,
               border: "none", background: C.primary,
               color: "#fff", fontSize: 14.5, fontWeight: 700,
               fontFamily: "IBM Plex Sans, sans-serif", cursor: "pointer",
               boxShadow: `0 0 24px ${C.primaryGlow}`,
-              display: "flex", alignItems: "center", gap: 8, transition: "all 0.15s",
+              display: "inline-flex", alignItems: "center", gap: 8, transition: "all 0.15s",
+              textDecoration: "none",
             }}
               onMouseEnter={e => { e.currentTarget.style.background = C.primaryHover; e.currentTarget.style.boxShadow = `0 0 36px rgba(103,106,241,0.32)`; }}
               onMouseLeave={e => { e.currentTarget.style.background = C.primary; e.currentTarget.style.boxShadow = `0 0 24px ${C.primaryGlow}`; }}>
-              Start free
+              Launch
               <svg width="13" height="13" viewBox="0 0 24 24" fill="none">
                 <path d="M5 12h14m-6-6l6 6-6 6" stroke="#fff" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"/>
               </svg>
-            </button>
+            </a>
 
             {/* Tertiary — ghost link */}
             <button style={{
@@ -416,32 +418,6 @@ function HeroSection() {
   );
 }
 
-// ── Trust strip ───────────────────────────────────────────────────────────────
-function TrustStrip() {
-  const LOGOS = ["Acme Corp", "DataLab AI", "HealthCo", "FinTech Inc", "Gov.ai", "NovaMed"];
-  return (
-    <div style={{ borderTop: `1px solid ${C.ink100}`, padding: "28px 56px" }}>
-      <div style={{ maxWidth: 1280, margin: "0 auto" }}>
-        <p style={{
-          fontSize: 10.5, fontFamily: "IBM Plex Mono, monospace",
-          color: C.ink200, textTransform: "uppercase", letterSpacing: "0.1em",
-          textAlign: "center", marginBottom: 20,
-        }}>
-          Trusted by data teams at
-        </p>
-        <div style={{ display: "flex", justifyContent: "center", gap: 52, alignItems: "center", flexWrap: "wrap" }}>
-          {LOGOS.map(l => (
-            <span key={l} style={{
-              fontSize: 12.5, fontFamily: "IBM Plex Mono, monospace",
-              color: C.ink100, fontWeight: 700,
-            }}>{l}</span>
-          ))}
-        </div>
-      </div>
-    </div>
-  );
-}
-
 // ── Page root ─────────────────────────────────────────────────────────────────
 export default function HeroPage() {
   return (
@@ -449,7 +425,6 @@ export default function HeroPage() {
       <BackgroundLayers />
       <Nav />
       <HeroSection />
-      <TrustStrip />
 
       <style>{`
         @import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600;700;800&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap');
