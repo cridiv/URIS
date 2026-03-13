@@ -30,7 +30,7 @@ function StatusPill({ status }: StatusPillProps) {
     none:    { c: "#8B949E", bg: "#F6F8FA", b: "#E1E4E8", l: "NONE" },
     queued:  { c: "#8B949E", bg: "#F6F8FA", b: "#E1E4E8", l: "QUEUED" },
   };
-  const s = map[status?.toLowerCase()] || map.none;
+  const s = map[status?.toLowerCase() as keyof typeof map] || map.none;
   return (
     <span style={{ fontSize: 10, fontFamily: "IBM Plex Mono, monospace", fontWeight: 700, color: s.c, background: s.bg, border: `1px solid ${s.b}`, borderRadius: 5, padding: "1px 6px", letterSpacing: "0.05em" }}>
       {s.l}
