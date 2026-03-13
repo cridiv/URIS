@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, type ReactNode } from "react";
 import { io, Socket } from "socket.io-client";
 
 // ── Design tokens (reused everywhere) ────────────────────────────────────────
@@ -13,6 +13,8 @@ const AGENT_META = {
     icon: <svg width="11" height="11" viewBox="0 0 24 24" fill="none"><path d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" stroke="#047857" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg> },
 };
 const AGENT_ORDER = ["evaluation", "planner", "compliance", "synthesis"];
+type AgentKey = keyof typeof AGENT_META;
+type AgentStatus = "queued" | "running" | "complete";
 
 // ── Primitives ────────────────────────────────────────────────────────────────
 type StatusPillProps = {
@@ -30,7 +32,7 @@ function StatusPill({ status }: StatusPillProps) {
     none:    { c: "#8B949E", bg: "#F6F8FA", b: "#E1E4E8", l: "NONE" },
     queued:  { c: "#8B949E", bg: "#F6F8FA", b: "#E1E4E8", l: "QUEUED" },
   };
-  const s = map[status?.toLowerCase() as keyof typeof map] || map.none;
+  const s = map[status] || map.none;
   return (
     <span style={{ fontSize: 10, fontFamily: "IBM Plex Mono, monospace", fontWeight: 700, color: s.c, background: s.bg, border: `1px solid ${s.b}`, borderRadius: 5, padding: "1px 6px", letterSpacing: "0.05em" }}>
       {s.l}
@@ -38,15 +40,21 @@ function StatusPill({ status }: StatusPillProps) {
   );
 }
 
-function Tag({ children, color = "#57606A", bg = "#F6F8FA", border = "#E1E4E8" }) {
+type TagProps = {
+  children: ReactNode;
+  color?: string;
+  bg?: string;
+  border?: string;
+};
+function Tag({ children, color = "#57606A", bg = "#F6F8FA", border = "#E1E4E8" }: TagProps) {
   return <span style={{ fontSize: 10.5, fontFamily: "IBM Plex Mono, monospace", fontWeight: 500, color, background: bg, border: `1px solid ${border}`, borderRadius: 5, padding: "2px 7px" }}>{children}</span>;
 }
 
-function SectionHead({ children }) {
+function SectionHead({ children }: { children: ReactNode }) {
   return <div style={{ fontSize: 9.5, fontFamily: "IBM Plex Mono, monospace", fontWeight: 700, letterSpacing: "0.1em", color: "#B1BAC4", textTransform: "uppercase", marginBottom: 7, marginTop: 12 }}>{children}</div>;
 }
 
-function MiniBar({ value, color = "#0969DA" }) {
+function MiniBar({ value, color = "#0969DA" }: { value: number; color?: string }) {
   return (
     <div style={{ display: "flex", alignItems: "center", gap: 7, flex: 1 }}>
       <div style={{ flex: 1, height: 4, borderRadius: 99, background: "#F0F2F4", overflow: "hidden" }}>
@@ -57,7 +65,7 @@ function MiniBar({ value, color = "#0969DA" }) {
   );
 }
 
-function Row({ label, children }) {
+function Row({ label, children }: { label: ReactNode; children: ReactNode }) {
   return (
     <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, padding: "5px 0", borderBottom: "1px solid #F6F8FA" }}>
       <span style={{ fontSize: 11.5, color: "#8B949E", fontFamily: "IBM Plex Sans, sans-serif", flexShrink: 0 }}>{label}</span>
@@ -74,8 +82,8 @@ function Cursor() {
 }
 
 // ── Live log lines ────────────────────────────────────────────────────────────
-function LogStream({ lines, running }) {
-  const endRef = useRef(null);
+function LogStream({ lines, running }: { lines: Array<{ message: string }>; running: boolean }) {
+  const endRef = useRef<HTMLDivElement | null>(null);
   useEffect(() => { endRef.current?.scrollIntoView({ behavior: "smooth" }); }, [lines]);
   return (
     <div style={{ marginTop: 10, background: "#0D1117", borderRadius: 9, padding: "10px 12px", display: "flex", flexDirection: "column", gap: 3, maxHeight: 120, overflowY: "auto" }}>
@@ -92,9 +100,9 @@ function LogStream({ lines, running }) {
 }
 
 // ── Agent header ──────────────────────────────────────────────────────────────
-function AgentHeader({ agentKey, status }) {
+function AgentHeader({ agentKey, status }: { agentKey: AgentKey; status: AgentStatus }) {
   const m = AGENT_META[agentKey];
-  const statusKey = status === "complete" ? "success" : status === "running" ? "running" : "queued";
+  const statusKey: StatusPillProps["status"] = status === "complete" ? "success" : status === "running" ? "running" : "queued";
   return (
     <div style={{ padding: "11px 16px 10px", borderBottom: "1px solid #F0F2F4", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
       <div style={{ display: "inline-flex", alignItems: "center", gap: 6, background: m.bg, border: `1px solid ${m.border}`, borderRadius: 8, padding: "3px 10px 3px 7px" }}>
@@ -115,7 +123,7 @@ function AgentHeader({ agentKey, status }) {
   );
 }
 
-function Dot({ delay, color }) {
+function Dot({ delay, color }: { delay: number; color: string }) {
   const [up, setUp] = useState(false);
   useEffect(() => {
     const t = setTimeout(() => {
@@ -128,8 +136,12 @@ function Dot({ delay, color }) {
 }
 
 // ── Result renderers per agent ────────────────────────────────────────────────
-function EvaluationResult({ payload }) {
-  const barColor = v => v >= 0.85 ? "#34D399" : v >= 0.65 ? "#FBBF24" : "#F87171";
+type EvaluationPayload = {
+  quality_scores?: Record<string, number | string>;
+  critical_gaps?: Array<{ severity?: string; affected_columns?: string[]; description?: string }>;
+};
+function EvaluationResult({ payload }: { payload?: EvaluationPayload | null }) {
+  const barColor = (v: number) => v >= 0.85 ? "#34D399" : v >= 0.65 ? "#FBBF24" : "#F87171";
   const qualityScores = payload?.quality_scores && typeof payload.quality_scores === "object"
     ? payload.quality_scores
     : {};
@@ -151,7 +163,7 @@ function EvaluationResult({ payload }) {
         );
       })}
       <SectionHead>Critical Gaps</SectionHead>
-      {criticalGaps.map((g, i) => {
+      {criticalGaps.map((g, i: number) => {
         const gapSeverity = g?.severity === "high" ? "high" : "medium";
         const affectedColumns = Array.isArray(g?.affected_columns) ? g.affected_columns : [];
 
@@ -160,7 +172,7 @@ function EvaluationResult({ payload }) {
           <svg width="11" height="11" viewBox="0 0 24 24" fill="none" style={{ marginTop: 1, flexShrink: 0 }}><path d="M12 9v4m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" stroke={gapSeverity === "high" ? "#DC2626" : "#B45309"} strokeWidth="2" strokeLinecap="round"/></svg>
           <div>
             <div style={{ fontSize: 11, color: gapSeverity === "high" ? "#DC2626" : "#B45309", fontFamily: "IBM Plex Sans, sans-serif", lineHeight: 1.4 }}>{g?.description ?? "Gap details unavailable"}</div>
-            <div style={{ display: "flex", gap: 4, marginTop: 4 }}>{affectedColumns.map(c => <Tag key={c}>{c}</Tag>)}</div>
+            <div style={{ display: "flex", gap: 4, marginTop: 4 }}>{affectedColumns.map((c: string) => <Tag key={c}>{c}</Tag>)}</div>
           </div>
         </div>
         );
@@ -169,7 +181,23 @@ function EvaluationResult({ payload }) {
   );
 }
 
-function PlannerResult({ payload }) {
+type PlannerTask = {
+  skip?: boolean;
+  agent?: string;
+  priority?: string;
+  task?: string;
+  reason?: string;
+};
+type PlannerPayload = {
+  target_column?: string;
+  risk_tolerance?: StatusPillProps["status"];
+  adfi_baseline?: number | string;
+  adfi_baseline_estimate?: { overall?: number };
+  tasks?: PlannerTask[];
+  ordered_tasks?: PlannerTask[];
+  constraints?: string[];
+};
+function PlannerResult({ payload }: { payload?: PlannerPayload | null }) {
   const agentColor = { compliance: "#7C3AED", synthesis: "#0969DA", validation: "#047857" };
   const agentBg    = { compliance: "#F5F3FF", synthesis: "#EFF6FF", validation: "#ECFDF5" };
   const tasks = payload?.tasks ?? payload?.ordered_tasks ?? [];
@@ -177,24 +205,29 @@ function PlannerResult({ payload }) {
   const adfiBaseline =
     payload?.adfi_baseline ?? payload?.adfi_baseline_estimate?.overall ?? "N/A";
 
+  const getAgentColor = (agent: string | undefined) =>
+    agent && agent in agentColor ? agentColor[agent as keyof typeof agentColor] : "#57606A";
+  const getAgentBg = (agent: string | undefined) =>
+    agent && agent in agentBg ? agentBg[agent as keyof typeof agentBg] : "#F6F8FA";
+
   return (
     <div>
       <Row label="Target"><Tag color="#0969DA" bg="#EFF6FF" border="#DBEAFE">{payload?.target_column ?? "N/A"}</Tag></Row>
       <Row label="Risk Tolerance"><StatusPill status={payload?.risk_tolerance ?? "none"} /></Row>
       <Row label="ADFI Baseline">{typeof adfiBaseline === "number" ? adfiBaseline.toFixed(3) : String(adfiBaseline)}</Row>
       <SectionHead>Task Queue</SectionHead>
-      {tasks.map((t, i) => (
+      {tasks.map((t: PlannerTask, i: number) => (
         <div key={i} style={{ display: "flex", alignItems: "flex-start", gap: 9, padding: "7px 0", borderBottom: i < tasks.length - 1 ? "1px solid #F6F8FA" : "none", opacity: t.skip ? 0.5 : 1 }}>
-          <div style={{ width: 20, height: 20, borderRadius: 6, flexShrink: 0, background: t.skip ? "#F6F8FA" : (agentBg[t.agent] || "#F6F8FA"), border: `1px solid ${t.skip ? "#E1E4E8" : `${agentColor[t.agent]}33`}`, display: "flex", alignItems: "center", justifyContent: "center" }}>
+          <div style={{ width: 20, height: 20, borderRadius: 6, flexShrink: 0, background: t.skip ? "#F6F8FA" : getAgentBg(t.agent), border: `1px solid ${t.skip ? "#E1E4E8" : `${getAgentColor(t.agent)}33`}`, display: "flex", alignItems: "center", justifyContent: "center" }}>
             {t.skip ? (
               <span style={{ fontSize: 10, color: "#8B949E" }}>—</span>
             ) : (
-              <span style={{ fontSize: 9.5, fontFamily: "IBM Plex Mono, monospace", fontWeight: 700, color: agentColor[t.agent] || "#57606A" }}>{t.priority}</span>
+              <span style={{ fontSize: 9.5, fontFamily: "IBM Plex Mono, monospace", fontWeight: 700, color: getAgentColor(t.agent) }}>{t.priority}</span>
             )}
           </div>
           <div style={{ flex: 1 }}>
             <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 2 }}>
-              <span style={{ fontSize: 10, fontFamily: "IBM Plex Mono, monospace", fontWeight: 600, color: t.skip ? "#8B949E" : (agentColor[t.agent] || "#57606A"), textTransform: "uppercase", letterSpacing: "0.05em" }}>{t.agent}</span>
+              <span style={{ fontSize: 10, fontFamily: "IBM Plex Mono, monospace", fontWeight: 600, color: t.skip ? "#8B949E" : getAgentColor(t.agent), textTransform: "uppercase", letterSpacing: "0.05em" }}>{t.agent}</span>
               {t.skip && (
                 <span style={{ fontSize: 9, fontFamily: "IBM Plex Mono, monospace", fontWeight: 600, color: "#8B949E", background: "#F6F8FA", border: "1px solid #E1E4E8", borderRadius: 4, padding: "1px 5px" }}>SKIPPED</span>
               )}
@@ -207,7 +240,7 @@ function PlannerResult({ payload }) {
         </div>
       ))}
       <SectionHead>Constraints</SectionHead>
-      {constraints.map((c, i) => (
+      {constraints.map((c: string, i: number) => (
         <div key={i} style={{ display: "flex", gap: 7, alignItems: "flex-start", padding: "3px 0" }}>
           <div style={{ width: 4, height: 4, borderRadius: 99, background: "#D0D7DE", marginTop: 5, flexShrink: 0 }} />
           <span style={{ fontSize: 11, color: "#57606A", fontFamily: "IBM Plex Sans, sans-serif", lineHeight: 1.5 }}>{c}</span>
@@ -217,7 +250,32 @@ function PlannerResult({ payload }) {
   );
 }
 
-function ComplianceResult({ payload }) {
+type ComplianceFinding = {
+  column?: string;
+  pii_type?: string;
+  severity?: StatusPillProps["status"];
+  confidence?: number;
+};
+type ComplianceAction = {
+  column?: string;
+  action?: string;
+  extraction_detail?: string;
+};
+type CompliancePayload = {
+  status?: string;
+  reason?: string;
+  privacy_risk_score?: number;
+  confidence?: number;
+  blocked_columns?: string[] | string;
+  pii_findings?: ComplianceFinding[];
+  recommended_actions?: ComplianceAction[];
+  regulatory_exposure?: Record<string, string>;
+  re_identification_risk?: {
+    score?: number;
+    contributing_columns?: string[];
+  };
+};
+function ComplianceResult({ payload }: { payload?: CompliancePayload | null }) {
   const regColor = { high: "#DC2626", medium: "#B45309", low: "#047857", none: "#8B949E" };
   const regBg    = { high: "#FEF2F2", medium: "#FFFBEB", low: "#ECFDF5", none: "#F6F8FA" };
   const regBdr   = { high: "#FEE2E2", medium: "#FEF3C7", low: "#D1FAE5", none: "#E1E4E8" };
@@ -240,10 +298,10 @@ function ComplianceResult({ payload }) {
   const getBlockedColumns = () => {
     if (!payload?.blocked_columns) return [];
     if (Array.isArray(payload.blocked_columns)) {
-      return payload.blocked_columns.filter(col => typeof col === 'string' && col.trim().length > 0);
+      return payload.blocked_columns.filter((col: string) => typeof col === 'string' && col.trim().length > 0);
     }
     if (typeof payload.blocked_columns === 'string') {
-      return payload.blocked_columns.split(',').map(c => c.trim()).filter(c => c.length > 0);
+      return payload.blocked_columns.split(',').map((c: string) => c.trim()).filter((c: string) => c.length > 0);
     }
     return [];
   };
@@ -252,7 +310,7 @@ function ComplianceResult({ payload }) {
   const getPIIFindings = () => {
     if (!payload?.pii_findings) return [];
     if (Array.isArray(payload.pii_findings)) {
-      return payload.pii_findings.filter(f => typeof f === 'object' && f !== null && f.column);
+      return payload.pii_findings.filter((f: ComplianceFinding) => typeof f === 'object' && f !== null && f.column);
     }
     return [];
   };
@@ -261,7 +319,7 @@ function ComplianceResult({ payload }) {
   const getRecommendedActions = () => {
     if (!payload?.recommended_actions) return [];
     if (Array.isArray(payload.recommended_actions)) {
-      return payload.recommended_actions.filter(a => typeof a === 'object' && a !== null && a.column);
+      return payload.recommended_actions.filter((a: ComplianceAction) => typeof a === 'object' && a !== null && a.column);
     }
     return [];
   };
@@ -277,7 +335,7 @@ function ComplianceResult({ payload }) {
       <Row label="Blocked">
         {blockedCols.length > 0 ? (
           <div style={{ display: "flex", gap: 4, flexWrap: "wrap", justifyContent: "flex-end" }}>
-            {blockedCols.slice(0, 2).map((col, i) => (
+            {blockedCols.slice(0, 2).map((col: string, i: number) => (
               <Tag key={i} color="#DC2626" bg="#FEF2F2" border="#FEE2E2">{col}</Tag>
             ))}
             {blockedCols.length > 2 && <span style={{ fontSize: 11, color: "#8B949E" }}>+{blockedCols.length - 2} more</span>}
@@ -288,7 +346,7 @@ function ComplianceResult({ payload }) {
       </Row>
       <SectionHead>PII Finding</SectionHead>
       {piiFindings.length > 0 ? (
-        piiFindings.map((f, i) => (
+        piiFindings.map((f: ComplianceFinding, i: number) => (
           <div key={i} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", background: "#FEF2F2", border: "1px solid #FEE2E2", borderRadius: 8, padding: "8px 10px", gap: 8, marginBottom: 6 }}>
             <div style={{ display: "flex", alignItems: "center", gap: 7, flex: 1, minWidth: 0 }}>
               <svg width="12" height="12" viewBox="0 0 24 24" fill="none" style={{ flexShrink: 0 }}><path d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" stroke="#DC2626" strokeWidth="2" strokeLinecap="round"/></svg>
@@ -309,12 +367,18 @@ function ComplianceResult({ payload }) {
       <SectionHead>Regulatory Exposure</SectionHead>
       {payload?.regulatory_exposure && typeof payload.regulatory_exposure === 'object' ? (
         <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-          {Object.entries(payload.regulatory_exposure).map(([reg, level]: [string, any]) => (
-            <div key={reg} style={{ flex: "1 1 auto", minWidth: 80, textAlign: "center", background: regBg[level?.toLowerCase?.() || "none"], border: `1px solid ${regBdr[level?.toLowerCase?.() || "none"]}`, borderRadius: 8, padding: "7px 4px" }}>
-              <div style={{ fontSize: 11, fontFamily: "IBM Plex Mono, monospace", fontWeight: 700, color: regColor[level?.toLowerCase?.() || "none"] }}>{typeof level === 'string' ? level.toUpperCase() : "NONE"}</div>
+          {Object.entries(payload.regulatory_exposure).map(([reg, level]: [string, unknown]) => {
+            const levelKey = typeof level === 'string' && level.toLowerCase() in regColor
+              ? (level.toLowerCase() as keyof typeof regColor)
+              : 'none';
+
+            return (
+            <div key={reg} style={{ flex: "1 1 auto", minWidth: 80, textAlign: "center", background: regBg[levelKey], border: `1px solid ${regBdr[levelKey]}`, borderRadius: 8, padding: "7px 4px" }}>
+              <div style={{ fontSize: 11, fontFamily: "IBM Plex Mono, monospace", fontWeight: 700, color: regColor[levelKey] }}>{typeof level === 'string' ? level.toUpperCase() : "NONE"}</div>
               <div style={{ fontSize: 9.5, color: "#8B949E", fontFamily: "IBM Plex Mono, monospace", marginTop: 2, textTransform: "uppercase", letterSpacing: "0.05em" }}>{reg}</div>
             </div>
-          ))}
+            );
+          })}
         </div>
       ) : (
         <div style={{ fontSize: 11, color: "#8B949E", padding: "8px 0", fontStyle: "italic" }}>No regulatory data available</div>
@@ -329,8 +393,8 @@ function ComplianceResult({ payload }) {
           {payload.re_identification_risk.contributing_columns && Array.isArray(payload.re_identification_risk.contributing_columns) && payload.re_identification_risk.contributing_columns.length > 0 && (
             <div style={{ display: "flex", flexWrap: "wrap", gap: 4 }}>
               {payload.re_identification_risk.contributing_columns
-                .filter(c => typeof c === 'string' && c.trim().length > 0)
-                .map(c => <Tag key={c} color="#B45309" bg="#FEF9C3" border="#FEF3C7">{c}</Tag>)
+                .filter((c: string) => typeof c === 'string' && c.trim().length > 0)
+                .map((c: string) => <Tag key={c} color="#B45309" bg="#FEF9C3" border="#FEF3C7">{c}</Tag>)
               }
             </div>
           )}
@@ -340,7 +404,7 @@ function ComplianceResult({ payload }) {
       )}
       <SectionHead>Action</SectionHead>
       {actions.length > 0 ? (
-        actions.map((a, i) => (
+        actions.map((a: ComplianceAction, i: number) => (
           <div key={i} style={{ background: "#F0FDF4", border: "1px solid #D1FAE5", borderRadius: 8, padding: "9px 11px", marginBottom: 6 }}>
             <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 4, gap: 8, flexWrap: "wrap" }}>
               <Tag color="#047857" bg="#DCFCE7" border="#D1FAE5">{a.column}</Tag>
@@ -356,7 +420,14 @@ function ComplianceResult({ payload }) {
   );
 }
 
-function SynthesisResult({ payload, datasetId, runId, onAnalysisSaved, existingSyntheticDataS3Key }) {
+type SynthesisResultProps = {
+  payload?: Record<string, unknown> | null;
+  datasetId?: string;
+  runId?: string;
+  onAnalysisSaved?: (analysis: { synthesis: Record<string, unknown>; syntheticDataS3Key?: string | null }) => void;
+  existingSyntheticDataS3Key?: string | null;
+};
+function SynthesisResult({ payload, datasetId, runId, onAnalysisSaved, existingSyntheticDataS3Key }: SynthesisResultProps) {
   const [generating, setGenerating] = useState(false);
   const [generatedFile, setGeneratedFile] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -405,7 +476,7 @@ function SynthesisResult({ payload, datasetId, runId, onAnalysisSaved, existingS
     ['Attempt', currentAttempt !== null ? `${currentAttempt}${maxAttempts ? `/${maxAttempts}` : ''}` : 'N/A'],
   ];
   
-  const driftColor = v => v < 0.10 ? "#34D399" : v < 0.15 ? "#FBBF24" : "#F87171";
+  const driftColor = (v: number) => v < 0.10 ? "#34D399" : v < 0.15 ? "#FBBF24" : "#F87171";
   
   // Handle synthesis failed/skipped
   if (synthesisPayload?.status === "synthesis_failed" || synthesisPayload?.status === "fallback") {
@@ -418,7 +489,7 @@ function SynthesisResult({ payload, datasetId, runId, onAnalysisSaved, existingS
           </div>
           {synthesisPayload?.trace && Array.isArray(synthesisPayload.trace) && synthesisPayload.trace.length > 0 && (
             <div style={{ fontSize: 10, color: "#8B949E", fontFamily: "IBM Plex Mono, monospace", background: "#F6F8FA", border: "1px solid #E1E4E8", borderRadius: 6, padding: "8px", textAlign: "left", maxHeight: 100, overflowY: "auto" }}>
-              {synthesisPayload.trace.map((line, i) => <div key={i}>{line}</div>)}
+              {synthesisPayload.trace.map((line: string, i: number) => <div key={i}>{line}</div>)}
             </div>
           )}
         </div>
@@ -533,10 +604,10 @@ function SynthesisResult({ payload, datasetId, runId, onAnalysisSaved, existingS
       <Row label="Strategy"><Tag color="#7C3AED" bg="#F5F3FF" border="#EDE9FE">{strategyLabel}</Tag></Row>
       <SectionHead>Imputation</SectionHead>
       {synthesisPayload.imputation_report && Object.keys(synthesisPayload.imputation_report).length > 0 ? (
-        Object.entries(synthesisPayload.imputation_report).map(([col, data]: [string, any], i) => (
+        Object.entries(synthesisPayload.imputation_report as Record<string, { action?: string; value?: unknown; reason?: string }>).map(([col, data], i: number) => (
           <div key={i} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "5px 0", borderBottom: "1px solid #F6F8FA", gap: 8 }}>
             <Tag>{col}</Tag>
-            <span style={{ fontSize: 10.5, color: "#8B949E", fontFamily: "IBM Plex Mono, monospace", flex: 1, textAlign: "center" }}>{data.action.replace(/_/g, " ")}</span>
+            <span style={{ fontSize: 10.5, color: "#8B949E", fontFamily: "IBM Plex Mono, monospace", flex: 1, textAlign: "center" }}>{(data.action ?? 'unknown').replace(/_/g, " ")}</span>
             <span style={{ fontSize: 11, fontFamily: "IBM Plex Mono, monospace", fontWeight: 600, color: data.action === "dropped" ? "#DC2626" : "#0D1117" }}>
               {data.value !== undefined ? data.value : (data.reason || '—')}
             </span>
@@ -551,7 +622,7 @@ function SynthesisResult({ payload, datasetId, runId, onAnalysisSaved, existingS
           ["Max Pair Diff.", correlationDrift.max_pair_difference, 0.20], 
           ["Frobenius Norm", correlationDrift.frobenius_norm, 0.40], 
           ["Mean Col. Drift", meanColumnDrift, 0.20]
-        ].filter(([, v]) => typeof v === 'number').map(([l, v, t]) => (
+        ].filter(([, v]) => typeof v === 'number').map(([l, v, t]: [string, number, number]) => (
           <div key={l} style={{ display: "flex", alignItems: "center", gap: 8, padding: "4px 0" }}>
             <span style={{ fontSize: 10.5, color: "#8B949E", width: 100, flexShrink: 0, fontFamily: "IBM Plex Sans, sans-serif" }}>{l}</span>
             <div style={{ flex: 1, height: 4, borderRadius: 99, background: "#F0F2F4", overflow: "hidden" }}>
@@ -569,7 +640,7 @@ function SynthesisResult({ payload, datasetId, runId, onAnalysisSaved, existingS
       )}
       <SectionHead>Attempt Trace</SectionHead>
       {traceAttempts.length > 0 ? (
-        traceAttempts.map((t, i) => (
+        traceAttempts.map((t, i: number) => (
           <div key={i} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", background: t.privacy === "pass" && t.correlation === "pass" ? "#F0FDF4" : "#FEF2F2", border: `1px solid ${t.privacy === "pass" && t.correlation === "pass" ? "#D1FAE5" : "#FEE2E2"}`, borderRadius: 7, padding: "6px 10px", marginBottom: 5 }}>
             <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
               <span style={{ fontSize: 10, fontFamily: "IBM Plex Mono, monospace", fontWeight: 700, color: "#8B949E" }}>#{t.attempt}</span>
@@ -759,7 +830,7 @@ function SynthesisResult({ payload, datasetId, runId, onAnalysisSaved, existingS
 const RESULT_RENDERERS = { evaluation: EvaluationResult, planner: PlannerResult, compliance: ComplianceResult, synthesis: SynthesisResult };
 
 // ── Arrow ─────────────────────────────────────────────────────────────────────
-function Arrow({ from }) {
+function Arrow({ from }: { from: AgentKey }) {
   return (
     <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 0, padding: "2px 0" }}>
       <div style={{ width: 1, height: 12, background: "#E1E4E8" }} />
