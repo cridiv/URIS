@@ -12,9 +12,17 @@ const AGENT_META = {
   synthesis:  { label: "Synthesis Agent",  color: "#047857", bg: "#ECFDF5", border: "#D1FAE5",
     icon: <svg width="11" height="11" viewBox="0 0 24 24" fill="none"><path d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" stroke="#047857" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg> },
 };
-const AGENT_ORDER = ["evaluation", "planner", "compliance", "synthesis"];
 type AgentKey = keyof typeof AGENT_META;
+const AGENT_ORDER: AgentKey[] = ["evaluation", "planner", "compliance", "synthesis"];
 type AgentStatus = "queued" | "running" | "complete";
+type AgentLogEntry = { message: string; payload?: Record<string, unknown> };
+type AgentRuntimeState = { status: AgentStatus; logs: AgentLogEntry[]; result: Record<string, unknown> | null };
+
+function createInitialAgents(): Record<AgentKey, AgentRuntimeState> {
+  return Object.fromEntries(
+    AGENT_ORDER.map((k) => [k, { status: "queued", logs: [], result: null }]),
+  ) as Record<AgentKey, AgentRuntimeState>;
+}
 
 // ── Primitives ────────────────────────────────────────────────────────────────
 type StatusPillProps = {
@@ -25,6 +33,7 @@ function StatusPill({ status }: StatusPillProps) {
     success: { c: "#047857", bg: "#ECFDF5", b: "#D1FAE5", l: "SUCCESS" },
     pass:    { c: "#047857", bg: "#ECFDF5", b: "#D1FAE5", l: "PASS" },
     fail:    { c: "#DC2626", bg: "#FEF2F2", b: "#FEE2E2", l: "FAIL" },
+    warning: { c: "#92400E", bg: "#FFFBEB", b: "#FDE68A", l: "WARNING" },
     running: { c: "#B45309", bg: "#FFFBEB", b: "#FEF3C7", l: "RUNNING" },
     high:    { c: "#DC2626", bg: "#FEF2F2", b: "#FEE2E2", l: "HIGH" },
     medium:  { c: "#B45309", bg: "#FFFBEB", b: "#FEF3C7", l: "MEDIUM" },
@@ -427,6 +436,20 @@ type SynthesisResultProps = {
   onAnalysisSaved?: (analysis: { synthesis: Record<string, unknown>; syntheticDataS3Key?: string | null }) => void;
   existingSyntheticDataS3Key?: string | null;
 };
+type AttemptTrace = { attempt: number; budget: number | null; privacy: StatusPillProps["status"]; correlation: StatusPillProps["status"] };
+type SynthesisPayload = Record<string, unknown> & {
+  synthesis_report?: Record<string, unknown>;
+  strategy_used?: Record<string, unknown>;
+  correlation_drift?: Record<string, unknown>;
+  correlation_report?: Record<string, unknown>;
+  trace_attempts?: AttemptTrace[];
+  trace?: string[];
+  attempt?: number;
+  max_attempts?: number;
+  status?: string;
+  warning?: string;
+  imputation_report?: Record<string, { action?: string; value?: unknown; reason?: string }>;
+};
 function SynthesisResult({ payload, datasetId, runId, onAnalysisSaved, existingSyntheticDataS3Key }: SynthesisResultProps) {
   const [generating, setGenerating] = useState(false);
   const [generatedFile, setGeneratedFile] = useState<string | null>(null);
@@ -435,15 +458,18 @@ function SynthesisResult({ payload, datasetId, runId, onAnalysisSaved, existingS
   const [resultMessage, setResultMessage] = useState<string | null>(null);
 
   // Synthesis may arrive either as direct payload or nested under `result`.
-  const synthesisPayload = payload?.result && typeof payload.result === 'object' ? payload.result : payload;
+  const synthesisPayload: SynthesisPayload | null =
+    payload?.result && typeof payload.result === 'object'
+      ? (payload.result as SynthesisPayload)
+      : (payload as SynthesisPayload | null);
   const synthesisReport = synthesisPayload?.synthesis_report && typeof synthesisPayload.synthesis_report === 'object'
-    ? synthesisPayload.synthesis_report
+    ? (synthesisPayload.synthesis_report as Record<string, unknown>)
     : null;
   const strategyUsed = synthesisPayload?.strategy_used && typeof synthesisPayload.strategy_used === 'object'
-    ? synthesisPayload.strategy_used
+    ? (synthesisPayload.strategy_used as Record<string, unknown>)
     : null;
   const correlationDrift = synthesisPayload?.correlation_drift
-    ?? synthesisPayload?.correlation_report?.drift_metrics
+    ?? ((synthesisPayload?.correlation_report?.drift_metrics as Record<string, unknown> | undefined) ?? null)
     ?? null;
   const traceAttempts = Array.isArray(synthesisPayload?.trace_attempts)
     ? synthesisPayload.trace_attempts
@@ -468,7 +494,7 @@ function SynthesisResult({ payload, datasetId, runId, onAnalysisSaved, existingS
     ? correlationDrift.mean_column_drift
     : (typeof correlationDrift?.mean_column_max_drift === 'number' ? correlationDrift.mean_column_max_drift : null);
 
-  const formatCount = (value, prefix = '') => (typeof value === 'number' ? `${prefix}${value.toLocaleString()}` : 'N/A');
+  const formatCount = (value: number | null, prefix = '') => (typeof value === 'number' ? `${prefix}${value.toLocaleString()}` : 'N/A');
   const summaryCards: Array<[string, string]> = [
     ['Before', formatCount(rowsBefore)],
     ['Generated', formatCount(rowsGenerated, '+')],
@@ -562,7 +588,7 @@ function SynthesisResult({ payload, datasetId, runId, onAnalysisSaved, existingS
           
           if (onAnalysisSaved) {
             onAnalysisSaved({
-              synthesis: synthesisPayload,
+              synthesis: synthesisPayload ?? {},
               syntheticDataS3Key: result.syntheticDataS3Key,
             });
           }
@@ -603,13 +629,13 @@ function SynthesisResult({ payload, datasetId, runId, onAnalysisSaved, existingS
       </div>
       <Row label="Strategy"><Tag color="#7C3AED" bg="#F5F3FF" border="#EDE9FE">{strategyLabel}</Tag></Row>
       <SectionHead>Imputation</SectionHead>
-      {synthesisPayload.imputation_report && Object.keys(synthesisPayload.imputation_report).length > 0 ? (
-        Object.entries(synthesisPayload.imputation_report as Record<string, { action?: string; value?: unknown; reason?: string }>).map(([col, data], i: number) => (
+      {synthesisPayload?.imputation_report && Object.keys(synthesisPayload.imputation_report).length > 0 ? (
+        Object.entries(synthesisPayload.imputation_report).map(([col, data], i: number) => (
           <div key={i} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "5px 0", borderBottom: "1px solid #F6F8FA", gap: 8 }}>
             <Tag>{col}</Tag>
             <span style={{ fontSize: 10.5, color: "#8B949E", fontFamily: "IBM Plex Mono, monospace", flex: 1, textAlign: "center" }}>{(data.action ?? 'unknown').replace(/_/g, " ")}</span>
             <span style={{ fontSize: 11, fontFamily: "IBM Plex Mono, monospace", fontWeight: 600, color: data.action === "dropped" ? "#DC2626" : "#0D1117" }}>
-              {data.value !== undefined ? data.value : (data.reason || '—')}
+              {data.value !== undefined ? String(data.value) : (data.reason || '—')}
             </span>
           </div>
         ))
@@ -618,11 +644,11 @@ function SynthesisResult({ payload, datasetId, runId, onAnalysisSaved, existingS
       )}
       <SectionHead>Correlation Drift</SectionHead>
       {correlationDrift ? (
-        [
+        ([
           ["Max Pair Diff.", correlationDrift.max_pair_difference, 0.20], 
           ["Frobenius Norm", correlationDrift.frobenius_norm, 0.40], 
           ["Mean Col. Drift", meanColumnDrift, 0.20]
-        ].filter(([, v]) => typeof v === 'number').map(([l, v, t]: [string, number, number]) => (
+        ] as Array<[string, number | null, number]>).filter((item): item is [string, number, number] => typeof item[1] === 'number').map(([l, v, t]) => (
           <div key={l} style={{ display: "flex", alignItems: "center", gap: 8, padding: "4px 0" }}>
             <span style={{ fontSize: 10.5, color: "#8B949E", width: 100, flexShrink: 0, fontFamily: "IBM Plex Sans, sans-serif" }}>{l}</span>
             <div style={{ flex: 1, height: 4, borderRadius: 99, background: "#F0F2F4", overflow: "hidden" }}>
@@ -640,7 +666,7 @@ function SynthesisResult({ payload, datasetId, runId, onAnalysisSaved, existingS
       )}
       <SectionHead>Attempt Trace</SectionHead>
       {traceAttempts.length > 0 ? (
-        traceAttempts.map((t, i: number) => (
+        traceAttempts.map((t: AttemptTrace, i: number) => (
           <div key={i} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", background: t.privacy === "pass" && t.correlation === "pass" ? "#F0FDF4" : "#FEF2F2", border: `1px solid ${t.privacy === "pass" && t.correlation === "pass" ? "#D1FAE5" : "#FEE2E2"}`, borderRadius: 7, padding: "6px 10px", marginBottom: 5 }}>
             <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
               <span style={{ fontSize: 10, fontFamily: "IBM Plex Mono, monospace", fontWeight: 700, color: "#8B949E" }}>#{t.attempt}</span>
@@ -844,9 +870,23 @@ function Arrow({ from }: { from: AgentKey }) {
 }
 
 // ── Agent block ───────────────────────────────────────────────────────────────
-function AgentBlock({ agentKey, agentState, datasetId, runId, onAnalysisSaved, existingSyntheticDataS3Key }) {
+type AgentBlockProps = {
+  agentKey: AgentKey;
+  agentState: AgentRuntimeState;
+  datasetId?: string;
+  runId?: string;
+  onAnalysisSaved?: (analysis: { synthesis: Record<string, unknown>; syntheticDataS3Key?: string | null }) => void;
+  existingSyntheticDataS3Key?: string | null;
+};
+function AgentBlock({ agentKey, agentState, datasetId, runId, onAnalysisSaved, existingSyntheticDataS3Key }: AgentBlockProps) {
   const { status, logs, result } = agentState;
-  const ResultRenderer = RESULT_RENDERERS[agentKey];
+  const ResultRenderer = RESULT_RENDERERS[agentKey] as (props: {
+    payload?: Record<string, unknown> | null;
+    datasetId?: string;
+    runId?: string;
+    onAnalysisSaved?: (analysis: { synthesis: Record<string, unknown>; syntheticDataS3Key?: string | null }) => void;
+    existingSyntheticDataS3Key?: string | null;
+  }) => JSX.Element;
   const isQueued = status === "queued";
 
   return (
@@ -904,6 +944,7 @@ interface AgentAnalysisProps {
     complianceStatus: string | null;
     task: string | null;
     createdAt: string;
+    updatedAt?: string | null;
     result?: Record<string, unknown> | null;
     errorMsg?: string | null;
     syntheticDataS3Key?: string | null;
@@ -1075,9 +1116,7 @@ function deriveAttemptTraceFromLines(lines: string[]): Array<{ attempt: number; 
 }
 
 export default function PipelineLog({ dataset, currentRun, onRunCreated }: AgentAnalysisProps) {
-  const [agents, setAgents] = useState(() =>
-    Object.fromEntries(AGENT_ORDER.map(k => [k, { status: "queued", logs: [], result: null }]))
-  );
+  const [agents, setAgents] = useState<Record<AgentKey, AgentRuntimeState>>(() => createInitialAgents());
   const [started, setStarted] = useState(false);
   const [done, setDone] = useState(false);
   const [elapsed, setElapsed] = useState(0);
@@ -1094,7 +1133,7 @@ export default function PipelineLog({ dataset, currentRun, onRunCreated }: Agent
       setStarted(false);
       setDone(false);
       setElapsed(0);
-      setAgents(Object.fromEntries(AGENT_ORDER.map(k => [k, { status: "queued", logs: [], result: null }])));
+      setAgents(createInitialAgents());
       return;
     }
 
@@ -1118,9 +1157,7 @@ export default function PipelineLog({ dataset, currentRun, onRunCreated }: Agent
       ((runResult?.pipeline_result as Record<string, unknown> | undefined) ?? runResult);
     if (!pipelineResult || typeof pipelineResult !== "object") return;
 
-    const nextAgents = Object.fromEntries(
-      AGENT_ORDER.map((k) => [k, { status: "queued", logs: [], result: null }]),
-    ) as Record<string, { status: string; logs: Array<{ message: string; payload?: Record<string, unknown> }>; result: Record<string, unknown> | null }>;
+    const nextAgents = createInitialAgents();
 
     const summaryTrace = Array.isArray(pipelineResult.trace)
       ? (pipelineResult.trace as string[])
@@ -1289,7 +1326,7 @@ export default function PipelineLog({ dataset, currentRun, onRunCreated }: Agent
     setStarted(true);
     setDone(false);
     setElapsed(0);
-    setAgents(Object.fromEntries(AGENT_ORDER.map(k => [k, { status: "queued", logs: [], result: null }])));
+    setAgents(createInitialAgents());
 
     timerRef.current = setInterval(() => setElapsed((e) => e + 100), 100);
 
@@ -1327,7 +1364,7 @@ export default function PipelineLog({ dataset, currentRun, onRunCreated }: Agent
     setStarted(false);
     setDone(false);
     setElapsed(0);
-    setAgents(Object.fromEntries(AGENT_ORDER.map(k => [k, { status: "queued", logs: [], result: null }])));
+    setAgents(createInitialAgents());
   };
 
   const activeAgent = AGENT_ORDER.find((k) => agents[k].status === "running");
