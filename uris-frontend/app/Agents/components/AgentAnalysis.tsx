@@ -480,7 +480,6 @@ function SynthesisResult({ payload, datasetId, runId, onAnalysisSaved, existingS
             credentials: 'include',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
-              evaluation: synthesisPayload,
               synthesis: synthesisPayload,
               syntheticDataS3Key: result.syntheticDataS3Key,
               generatedAt: new Date().toISOString(),

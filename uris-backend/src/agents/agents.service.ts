@@ -703,11 +703,35 @@ export class AgentsService {
       throw new NotFoundException(`Run ${runId} for dataset ${datasetId} not found`);
     }
 
-    // Update run with analysis
+    const existingAnalysis =
+      run.analysis && typeof run.analysis === 'object' && !Array.isArray(run.analysis)
+        ? { ...(run.analysis as Record<string, unknown>) }
+        : {};
+
+    const mergedAnalysis: Record<string, unknown> = {
+      ...existingAnalysis,
+      ...analysisData,
+    };
+
+    // Preserve and accumulate persisted audit history unless caller explicitly
+    // provides a richer audit stream. This prevents sparse save-analysis calls
+    // from wiping real-time event context collected during orchestration.
+    const existingEventsRaw = existingAnalysis.audit_events;
+    const incomingEventsRaw = analysisData.audit_events;
+    const existingEvents = Array.isArray(existingEventsRaw) ? existingEventsRaw : [];
+    const incomingEvents = Array.isArray(incomingEventsRaw) ? incomingEventsRaw : [];
+    if (incomingEvents.length === 0 && existingEvents.length > 0) {
+      mergedAnalysis.audit_events = existingEvents;
+    } else if (incomingEvents.length > 0 && existingEvents.length > 0) {
+      const MAX_AUDIT_EVENTS = 5000;
+      mergedAnalysis.audit_events = [...existingEvents, ...incomingEvents].slice(-MAX_AUDIT_EVENTS);
+    }
+
+    // Update run with merged analysis
     const updated = await this.prisma.agentRun.update({
       where: { id: runId },
       data: {
-        analysis: analysisData as Prisma.InputJsonValue,
+        analysis: mergedAnalysis as Prisma.InputJsonValue,
         updatedAt: new Date(),
       },
     });
