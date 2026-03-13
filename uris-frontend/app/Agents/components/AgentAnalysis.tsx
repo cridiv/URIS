@@ -15,7 +15,10 @@ const AGENT_META = {
 const AGENT_ORDER = ["evaluation", "planner", "compliance", "synthesis"];
 
 // ── Primitives ────────────────────────────────────────────────────────────────
-function StatusPill({ status }) {
+type StatusPillProps = {
+  status: "success" | "pass" | "fail" | "warning" | "running" | "high" | "medium" | "low" | "none" | "queued";
+};
+function StatusPill({ status }: StatusPillProps) {
   const map = {
     success: { c: "#047857", bg: "#ECFDF5", b: "#D1FAE5", l: "SUCCESS" },
     pass:    { c: "#047857", bg: "#ECFDF5", b: "#D1FAE5", l: "PASS" },
