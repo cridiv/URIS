@@ -1,6 +1,5 @@
 "use client";
 import { useState, useEffect, useRef } from "react";
-import { useSearchParams } from "next/navigation";
 
 // ── DSL Grammar ───────────────────────────────────────────────────────────────
 
@@ -96,7 +95,8 @@ const BUILT_IN_POLICIES = [
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:5000";
 
-const getSessionKey = (datasetId) => `uris_policy_session_${datasetId || "unbound"}`;
+// Use a single global policy key that applies to all datasets
+const getSessionKey = () => `uris_policy_global`;
 
 // ── Session persistence ───────────────────────────────────────────────────────
 // Reads/writes the attached policy state to localStorage so it survives
@@ -110,9 +110,9 @@ const getSessionKey = (datasetId) => `uris_policy_session_${datasetId || "unboun
 //   savedAt:        ISO string        — last save timestamp (shown in UI)
 // }
 
-function loadSession(datasetId) {
+function loadSession() {
   try {
-    const raw = localStorage.getItem(getSessionKey(datasetId));
+    const raw = localStorage.getItem(getSessionKey());
     if (!raw) return null;
     const parsed = JSON.parse(raw);
     return {
@@ -125,9 +125,9 @@ function loadSession(datasetId) {
   }
 }
 
-function saveSession({ attachedIds, customPolicies, datasetId }) {
+function saveSession({ attachedIds, customPolicies }) {
   try {
-    localStorage.setItem(getSessionKey(datasetId), JSON.stringify({
+    localStorage.setItem(getSessionKey(), JSON.stringify({
       attachedIds:    [...attachedIds],
       customPolicies,
       savedAt:        new Date().toISOString(),
@@ -638,25 +638,6 @@ function RunPipelineBar({ onSubmit, submitState, onClearSession }) {
 // ── Page ──────────────────────────────────────────────────────────────────────
 
 export default function PolicyPage() {
-  const searchParams = useSearchParams();
-  const [activeDatasetId, setActiveDatasetId] = useState("");
-
-  useEffect(() => {
-    const fromQuery = searchParams.get("datasetId");
-    if (fromQuery) {
-      setActiveDatasetId(fromQuery);
-      try { localStorage.setItem("uris_active_dataset_id", fromQuery); } catch {}
-      return;
-    }
-
-    try {
-      const remembered = localStorage.getItem("uris_active_dataset_id") ?? "";
-      setActiveDatasetId(remembered);
-    } catch {
-      setActiveDatasetId("");
-    }
-  }, [searchParams]);
-
   // ── Hydrate from localStorage on first render ──────────────────────────────
   // `hydrated` flag prevents a flash where SSR renders default state, then
   // client immediately overwrites it — causing a layout shift and React
@@ -668,26 +649,26 @@ export default function PolicyPage() {
   const [tab, setTab]                     = useState("attach");
   const [submitState, setSubmitState]     = useState("idle");
 
-  // Load persisted session once on mount (client-side only)
+  // Load persisted global policy session once on mount (client-side only)
   useEffect(() => {
-    const session = loadSession(activeDatasetId);
+    const session = loadSession();
     if (session) {
       setAttachedIds(session.attachedIds);
       setCustomPolicies(session.customPolicies);
       setSavedAt(session.savedAt);
     }
     setHydrated(true);
-  }, [activeDatasetId]);
+  }, []);
 
-  // Persist to localStorage whenever attached IDs or custom policies change,
+  // Persist global policy to localStorage whenever attached IDs or custom policies change,
   // but only after initial hydration (avoids overwriting on first render).
   const isFirstSave = useRef(true);
   useEffect(() => {
     if (!hydrated) return;
     if (isFirstSave.current) { isFirstSave.current = false; return; }
-    saveSession({ attachedIds, customPolicies, datasetId: activeDatasetId });
+    saveSession({ attachedIds, customPolicies });
     setSavedAt(new Date().toISOString());
-  }, [attachedIds, customPolicies, hydrated, activeDatasetId]);
+  }, [attachedIds, customPolicies, hydrated]);
 
   const toggle = (id) => setAttachedIds(prev => {
     const next = new Set(prev);
@@ -725,20 +706,16 @@ export default function PolicyPage() {
   const attached = allPolicies.filter(p => attachedIds.has(p.id));
 
   const handleRunPipeline = async () => {
-    if (!activeDatasetId) {
-      console.error("[PolicyPage] Missing datasetId in URL. Open Policy with ?datasetId=<id>.");
-      setSubmitState("error");
-      return;
-    }
-
     setSubmitState("sending");
 
-    const payload = buildPolicyPayload({ attachedIds, allPolicies, datasetId: activeDatasetId });
-    console.log("[PolicyPage] Sending payload →", JSON.stringify(payload, null, 2));
+    // Use 'global' to indicate this policy applies to all datasets until changed
+    const payload = buildPolicyPayload({ attachedIds, allPolicies, datasetId: "global" });
+    console.log("[PolicyPage] Sending global policy payload →", JSON.stringify(payload, null, 2));
 
     try {
       const res = await fetch(`${API_BASE}/policy/attach`, {
         method:  "POST",
+        credentials: "include",
         headers: { "Content-Type": "application/json" },
         body:    JSON.stringify(payload),
       });

@@ -4,12 +4,20 @@ import {
   Post,
   Body,
   Param,
+  Req,
+  UseGuards,
   HttpStatus,
   HttpCode,
   Headers,
 } from '@nestjs/common';
+import { AuthGuard } from '@nestjs/passport';
 import { AgentsService } from './agents.service';
 import { AgentsGateway } from './agents.gateway';
+import type { Request } from 'express';
+
+interface AuthenticatedRequest extends Request {
+  user: { id: string; email?: string };
+}
 
 interface AgentReasoningEventDTO {
   type: 'agent_start' | 'agent_data' | 'agent_complete';
@@ -30,8 +38,12 @@ export class AgentsController {
    * Get all agent runs for a specific dataset
    */
   @Get(':datasetId')
-  async getDatasetRuns(@Param('datasetId') datasetId: string) {
-    return this.agentsService.getDatasetRuns(datasetId);
+  @UseGuards(AuthGuard('jwt'))
+  async getDatasetRuns(
+    @Req() req: AuthenticatedRequest,
+    @Param('datasetId') datasetId: string,
+  ) {
+    return this.agentsService.getDatasetRuns(req.user.id, datasetId);
   }
 
   /**
@@ -41,11 +53,13 @@ export class AgentsController {
    */
   @Post(':datasetId/orchestrate')
   @HttpCode(HttpStatus.ACCEPTED)
+  @UseGuards(AuthGuard('jwt'))
   async orchestrateAgents(
+    @Req() req: AuthenticatedRequest,
     @Param('datasetId') datasetId: string,
     @Headers('x-backend-url') backendUrl?: string,
   ) {
-    return this.agentsService.orchestrateAgents(datasetId, backendUrl);
+    return this.agentsService.orchestrateAgents(req.user.id, datasetId, backendUrl);
   }
 
   /**
@@ -53,11 +67,13 @@ export class AgentsController {
    * Get a specific agent run result
    */
   @Get(':datasetId/runs/:runId')
+  @UseGuards(AuthGuard('jwt'))
   async getRunResult(
+    @Req() req: AuthenticatedRequest,
     @Param('datasetId') datasetId: string,
     @Param('runId') runId: string,
   ) {
-    return this.agentsService.getRunResult(datasetId, runId);
+    return this.agentsService.getRunResult(req.user.id, datasetId, runId);
   }
 
   /**
@@ -85,11 +101,13 @@ export class AgentsController {
    */
   @Post(':datasetId/runs/:runId/generate-synthetic')
   @HttpCode(HttpStatus.OK)
+  @UseGuards(AuthGuard('jwt'))
   async generateSyntheticData(
+    @Req() req: AuthenticatedRequest,
     @Param('datasetId') datasetId: string,
     @Param('runId') runId: string,
   ) {
-    return this.agentsService.generateSyntheticData(datasetId, runId);
+    return this.agentsService.generateSyntheticData(req.user.id, datasetId, runId);
   }
 
   /**
@@ -98,12 +116,14 @@ export class AgentsController {
    */
   @Post(':datasetId/runs/:runId/save-analysis')
   @HttpCode(HttpStatus.OK)
+  @UseGuards(AuthGuard('jwt'))
   async saveAnalysis(
+    @Req() req: AuthenticatedRequest,
     @Param('datasetId') datasetId: string,
     @Param('runId') runId: string,
     @Body() analysisData: Record<string, unknown>,
   ) {
-    return this.agentsService.saveAnalysis(datasetId, runId, analysisData);
+    return this.agentsService.saveAnalysis(req.user.id, datasetId, runId, analysisData);
   }
 
   /**
@@ -112,11 +132,13 @@ export class AgentsController {
    */
   @Get(':datasetId/runs/:runId/analysis')
   @HttpCode(HttpStatus.OK)
+  @UseGuards(AuthGuard('jwt'))
   async getAnalysis(
+    @Req() req: AuthenticatedRequest,
     @Param('datasetId') datasetId: string,
     @Param('runId') runId: string,
   ) {
-    return this.agentsService.getAnalysis(datasetId, runId);
+    return this.agentsService.getAnalysis(req.user.id, datasetId, runId);
   }
 
   /**
@@ -125,10 +147,12 @@ export class AgentsController {
    */
   @Get(':datasetId/runs/:runId/download-synthetic')
   @HttpCode(HttpStatus.OK)
+  @UseGuards(AuthGuard('jwt'))
   async getSyntheticDownload(
+    @Req() req: AuthenticatedRequest,
     @Param('datasetId') datasetId: string,
     @Param('runId') runId: string,
   ) {
-    return this.agentsService.getSyntheticDownload(datasetId, runId);
+    return this.agentsService.getSyntheticDownload(req.user.id, datasetId, runId);
   }
 }

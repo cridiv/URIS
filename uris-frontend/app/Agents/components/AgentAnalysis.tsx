@@ -437,9 +437,12 @@ function SynthesisResult({ payload, datasetId, runId, onAnalysisSaved, existingS
     try {
       const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:5000';
       const response = existingSyntheticDataS3Key
-        ? await fetch(`${API_BASE}/agents/${datasetId}/runs/${runId}/download-synthetic`)
+        ? await fetch(`${API_BASE}/agents/${datasetId}/runs/${runId}/download-synthetic`, {
+            credentials: 'include',
+          })
         : await fetch(`${API_BASE}/agents/${datasetId}/runs/${runId}/generate-synthetic`, {
             method: 'POST',
+            credentials: 'include',
             headers: { 'Content-Type': 'application/json' },
           });
       
@@ -474,6 +477,7 @@ function SynthesisResult({ payload, datasetId, runId, onAnalysisSaved, existingS
         try {
           await fetch(`${API_BASE}/agents/${datasetId}/runs/${runId}/save-analysis`, {
             method: 'POST',
+            credentials: 'include',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
               evaluation: synthesisPayload,
@@ -554,6 +558,10 @@ function SynthesisResult({ payload, datasetId, runId, onAnalysisSaved, existingS
             <span style={{ fontSize: 11, fontFamily: "IBM Plex Mono, monospace", fontWeight: 600, color: "#24292F", minWidth: 38, textAlign: "right" }}>{v.toFixed(2)}</span>
           </div>
         ))
+      ) : synthesisPayload?.correlation_report?.status === "skip" ? (
+        <div style={{ fontSize: 11, color: "#8B949E", padding: "8px 0", fontStyle: "italic" }}>
+          {synthesisPayload.correlation_report.details || "No numeric columns available for correlation check"}
+        </div>
       ) : (
         <div style={{ fontSize: 11, color: "#8B949E", padding: "8px 0", fontStyle: "italic" }}>No correlation data available</div>
       )}
@@ -1217,6 +1225,7 @@ export default function PipelineLog({ dataset, currentRun, onRunCreated }: Agent
       const backendUrl = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:5000";
       const res = await fetch(`${backendUrl}/agents/${dataset.id}/orchestrate`, {
         method: "POST",
+        credentials: "include",
         headers: {
           "Content-Type": "application/json",
           "X-Backend-Url": backendUrl,

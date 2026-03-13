@@ -37,7 +37,6 @@ def run_pipeline(
             dataset_path=dataset_path,
             task_type=task_type,
             target_column=target_column,
-            policy_config=policy_config,
             event_emitter=event_emitter,
         )
 
@@ -71,6 +70,7 @@ def run_pipeline(
         planner_result = run_planner(
             dataset_summary=evaluation,
             user_goal=user_goal,
+            policy_config=policy_config,
         )
 
         if planner_result["status"] == "error":
@@ -115,6 +115,7 @@ def run_pipeline(
             compliance_result = run_compliance(
                 dataset_path=dataset_path,
                 evaluation=evaluation,
+                plan=plan,
             )
 
             if compliance_result["status"] == "error":
@@ -152,11 +153,22 @@ def run_pipeline(
                 event_emitter.emit_data("compliance", message="No PII risk detected — skipping compliance check")
                 event_emitter.emit_complete("compliance", compliance)
 
-        # Skip synthesis if not needed
-        needs_synthesis = any(
+        # Synthesis is needed if planner requested it OR compliance requires
+        # transformations (e.g., block/drop/extract actions) before output use.
+        planner_requests_synthesis = any(
             t["agent"] == "synthesis" and not t.get("skip", False)
             for t in plan["ordered_tasks"]
         )
+        compliance_requires_synthesis = bool(compliance.get("blocked_columns", [])) or bool(
+            compliance.get("recommended_actions", [])
+        )
+        needs_synthesis = planner_requests_synthesis or compliance_requires_synthesis
+
+        if compliance_requires_synthesis and not planner_requests_synthesis:
+            trace.append(
+                "Synthesis forced by compliance directives despite planner skip"
+            )
+
         if not needs_synthesis:
             trace.append("Synthesis skipped — dataset already meets quality requirements")
             if event_emitter:
@@ -199,6 +211,7 @@ def run_pipeline(
                 dataset_path=dataset_path,
                 evaluation=evaluation,
                 compliance=compliance,
+                plan=plan,
                 task_type=task_type,
                 target_column=target_column,
                 max_retries=3,
@@ -243,6 +256,7 @@ def run_pipeline(
                     dataset_path=dataset_path,
                     evaluation=evaluation,
                     compliance=compliance,
+                    plan=plan,
                     task_type=task_type,
                     target_column=target_column,
                     max_retries=3,

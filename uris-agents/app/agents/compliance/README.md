@@ -4,11 +4,12 @@ Analyses a dataset for PII exposure, re-identification risk, and regulatory obli
 
 ## What it does
 
-1. Reads PII-flagged columns from the Evaluation Agent's output.
+1. Reads PII-flagged columns from the Evaluation Agent's output and planner-targeted policy columns.
 2. Runs `structure_extractor` on those columns to detect embedded extractable information (titles, email domains, phone country codes, zip codes) before deciding to drop them.
-3. Sends the evaluation summary and structure hints to Amazon Bedrock Nova Lite.
+3. Sends the evaluation summary, planner delegation context, and structure hints to Amazon Bedrock Nova Lite.
 4. Parses Nova's JSON response and **overrides** the `privacy_risk_score` with a deterministic calculation — Nova's value is discarded.
-5. Returns a compliance report with blocked columns, recommended actions, and regulatory exposure.
+5. Applies planner-owned policy directives as authoritative overrides.
+6. Returns a compliance report with blocked columns, recommended actions, and regulatory exposure.
 
 ---
 
@@ -25,17 +26,18 @@ Computes a deterministic privacy risk score, ignoring whatever score Nova return
 
 ---
 
-### `run_compliance(dataset_path, evaluation) → dict`
+### `run_compliance(dataset_path, evaluation, plan=None) → dict`
 
 Main entry point called by the orchestrator.
 
-1. Collects the PII-flagged column names from the evaluation's `schema_summary`.
+1. Collects the PII-flagged column names from the evaluation's `schema_summary` and any explicit planner policy targets.
 2. Calls `extract_structure_hints()` on those columns.
-3. Builds a user message combining the full evaluation JSON and the structure hints.
+3. Builds a user message combining the full evaluation JSON, planner delegation context, and the structure hints.
 4. Invokes Nova and strips markdown code fences from the response.
 5. Validates required keys in Nova's output (`pii_findings`, `regulatory_exposure`, `re_identification_risk`, `privacy_risk_score`, `blocked_columns`).
 6. Replaces `privacy_risk_score` with the deterministic value from `_compute_privacy_risk_score()`.
-7. Returns `{"status": "success", "compliance": <parsed>}` or `{"status": "error", ...}`.
+7. Applies planner policy overrides.
+8. Returns `{"status": "success", "compliance": <parsed>}` or `{"status": "error", ...}`.
 
 ---
 

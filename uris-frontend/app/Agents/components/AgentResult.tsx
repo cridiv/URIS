@@ -164,11 +164,14 @@ export default function AgentResult({
   // Run metrics
   const trace = (synthesis.trace as string[] | undefined) ?? [];
   const synthesisAttempts = trace.filter((line) => /^Attempt\s+\d+\//i.test(line)).length || toNumber(synthesis.attempt) || 0;
-  const corrDriftRaw =
+  
+  // Correlation drift: handle skip status gracefully
+  const correlationStatus = correlationReport.status;
+  const corrDriftRaw = correlationStatus === "skip" ? null :
     toNumber(correlationReport.max_pair_difference) ??
     toNumber((correlationReport.drift_metrics as Record<string, unknown> | undefined)?.max_pair_difference) ??
     0;
-  const corrDriftMax = corrDriftRaw * 100;
+  const corrDriftMax = corrDriftRaw === null ? null : corrDriftRaw * 100;
   const rowsGenerated =
     toNumber((pipelineResult.synthesis as Record<string, unknown> | undefined)?.augmented_rows) ??
     toNumber(synthesis.augmented_rows) ??
@@ -340,10 +343,11 @@ export default function AgentResult({
           </MetaRow>
           <MetaRow label="Corr. Drift (max)">
             <span style={{
-              color: "#B45309", background: "#FFFBEB",
-              border: "1px solid #FEF3C7",
-              borderRadius: 5, fontSize: 11, padding: "1px 6px",
-            }}>{corrDriftMax.toFixed(1)}%</span>
+              color: corrDriftMax === null ? "#8B949E" : "#B45309",
+              background: corrDriftMax === null ? "transparent" : "#FFFBEB",
+              border: corrDriftMax === null ? "none" : "1px solid #FEF3C7",
+              borderRadius: 5, fontSize: 11, padding: corrDriftMax === null ? "0" : "1px 6px",
+            }}>{corrDriftMax === null ? "–" : `${corrDriftMax.toFixed(1)}%`}</span>
           </MetaRow>
           <MetaRow label="Rows Generated">
             <span style={{ color: "#0D1117" }}>{rowsGenerated}</span>

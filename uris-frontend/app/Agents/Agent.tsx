@@ -97,7 +97,7 @@ export default function AgentsView({ datasetId, initialRunId }: AgentsViewProps)
     const fetchDatasets = async () => {
       setDatasetsLoading(true);
       try {
-        const res = await fetch(`${API_BASE}/dataset`);
+        const res = await fetch(`${API_BASE}/dataset`, { credentials: "include" });
         if (!res.ok) throw new Error("Failed to fetch datasets");
         const data = (await res.json()) as Dataset[];
         setDatasets(Array.isArray(data) ? data : []);
@@ -122,14 +122,14 @@ export default function AgentsView({ datasetId, initialRunId }: AgentsViewProps)
     const fetchData = async () => {
       try {
         // Fetch dataset details
-        const datasetRes = await fetch(`${API_BASE}/dataset/${activeDatasetId}`);
+        const datasetRes = await fetch(`${API_BASE}/dataset/${activeDatasetId}`, { credentials: "include" });
         if (datasetRes.ok) {
           const datasetData = await datasetRes.json();
           setDataset(datasetData);
         }
 
         // Fetch current/latest run for this dataset
-        const runsRes = await fetch(`${API_BASE}/agents/${activeDatasetId}`);
+        const runsRes = await fetch(`${API_BASE}/agents/${activeDatasetId}`, { credentials: "include" });
         if (runsRes.ok) {
           const runsData = await runsRes.json();
           if (runsData.runs && runsData.runs.length > 0) {
@@ -154,7 +154,7 @@ export default function AgentsView({ datasetId, initialRunId }: AgentsViewProps)
 
     const interval = setInterval(async () => {
       try {
-        const runsRes = await fetch(`${API_BASE}/agents/${activeDatasetId}`);
+        const runsRes = await fetch(`${API_BASE}/agents/${activeDatasetId}`, { credentials: "include" });
         if (!runsRes.ok) return;
         const runsData = await runsRes.json();
         if (Array.isArray(runsData?.runs)) {

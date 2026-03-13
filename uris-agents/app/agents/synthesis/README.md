@@ -17,10 +17,11 @@ Orchestrates synthetic data generation using SDV GaussianCopula. Enforces compli
 
 ## Functions
 
-### `prepare_synthesis_input(evaluation, compliance, task_type, target_column, rejection_context) → dict`
+### `prepare_synthesis_input(evaluation, compliance, plan, task_type, target_column, rejection_context) → dict`
 
 Builds the JSON payload sent to Nova before each attempt.
 
+- Includes planner objective, constraints, risk tolerance, and synthesis task context.
 - Extracts ADFI, balance, imbalance severity, critical gaps, and recommended focus from the evaluation.
 - Extracts blocked columns, recommended actions, and privacy risk score from the compliance report.
 - If `rejection_context` is provided (validation retry), injects a `previous_attempt` block so Nova knows what failed and what to change.
@@ -46,14 +47,14 @@ Applied only when this is a retry after a Validation rejection.
 
 ---
 
-### `run_synthesis_agent(dataset_path, evaluation, compliance, task_type, target_column, max_retries, rejection_context) → dict`
+### `run_synthesis_agent(dataset_path, evaluation, compliance, plan, task_type, target_column, max_retries, rejection_context) → dict`
 
 Main entry point called by the orchestrator.
 
 1. Auto-detects identifier columns (e.g. `PassengerId`) and removes them from the reference DataFrame used for privacy checks — they are never synthesized.
 2. Runs up to `max_retries` attempts, each time:
    - Asking Nova for a strategy decision.
-   - Enforcing compliance and rejection adjustments.
+   - Enforcing planner context, compliance, and rejection adjustments.
    - Running synthesis via `run_synthesis()`.
    - Running `run_privacy_check()` with `small_dataset=True` if the dataset has fewer than 5 000 rows.
    - Running `run_correlation_check()`.

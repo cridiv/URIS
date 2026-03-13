@@ -51,12 +51,19 @@ export class AuthController {
       this.config.get<string>('FRONTEND_AUTH_ERROR_URL') ??
       `${frontendBaseUrl.replace(/\/$/, '')}/Signin`;
 
+    this.logger.log(`Google callback hit (successRedirect=${successRedirect})`);
+
     try {
       const googleUser = req.user;
 
       if (!googleUser) {
+        this.logger.warn('Google callback completed without req.user');
         return res.redirect(`${errorRedirect}?error=google_user_missing`);
       }
+
+      this.logger.log(
+        `Google user payload received (googleId=${googleUser.googleId}, email=${googleUser.email ?? 'missing'})`,
+      );
 
       const user = await this.authService.validateGoogleUser(googleUser);
 
@@ -76,10 +83,15 @@ export class AuthController {
         path: '/',
       });
 
+      this.logger.log(`Auth cookie set for userId=${user.id}; redirecting to ${successRedirect}`);
+
       return res.redirect(successRedirect);
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Unknown auth callback error';
-      this.logger.error(`Google callback failed: ${message}`);
+      this.logger.error(
+        `Google callback failed: ${message}`,
+        error instanceof Error ? error.stack : undefined,
+      );
 
       const separator = errorRedirect.includes('?') ? '&' : '?';
       return res.redirect(`${errorRedirect}${separator}error=auth_callback_failed`);
@@ -90,6 +102,7 @@ export class AuthController {
   @Get('me')
   async me(@Req() req: AuthenticatedRequest) {
     const userId = req.user.id;
+    this.logger.log(`/auth/me called (userId=${userId})`);
     const user = await this.authService.getUserById(userId);
 
     if (!user) {

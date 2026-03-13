@@ -59,8 +59,8 @@ def clean_for_json(obj):
 #   "custom_policies_attached": [{ id, name, description }]
 # }
 #
-# This gets threaded through to run_pipeline → evaluation agent (annotation)
-# → compliance agent (enforcement) → synthesis agent (column manifest).
+# This gets threaded through to run_pipeline → planner agent (orchestration)
+# → compliance/synthesis via planner-owned delegation context.
 
 
 @router.post("/run")

@@ -43,7 +43,7 @@ export class AgentsService {
   /**
    * Get all agent runs for a specific dataset
    */
-  async getDatasetRuns(datasetId: string) {
+  async getDatasetRuns(userId: string, datasetId: string) {
     // Verify dataset exists
     const dataset = await this.prisma.dataset.findUnique({
       where: { id: datasetId },
@@ -59,10 +59,15 @@ export class AgentsService {
       throw new NotFoundException(`Dataset ${datasetId} not found`);
     }
 
+    if (dataset.userId !== userId) {
+      throw new NotFoundException(`Dataset ${datasetId} not found`);
+    }
+
     // Return formatted dataset + runs for frontend consumption
     return {
       dataset: {
         id: dataset.id,
+        userId: dataset.userId,
         name: dataset.name,
         rowCount: dataset.rowCount,
         columnCount: dataset.columnCount,
@@ -79,13 +84,17 @@ export class AgentsService {
    * Returns immediately with the run ID (202 Accepted)
    * Pipeline execution happens in background
    */
-  async orchestrateAgents(datasetId: string, backendUrl?: string) {
+  async orchestrateAgents(userId: string, datasetId: string, backendUrl?: string) {
     // Verify dataset exists and is ready
     const dataset = await this.prisma.dataset.findUnique({
       where: { id: datasetId },
     });
 
     if (!dataset) {
+      throw new NotFoundException(`Dataset ${datasetId} not found`);
+    }
+
+    if (dataset.userId !== userId) {
       throw new NotFoundException(`Dataset ${datasetId} not found`);
     }
 
@@ -261,13 +270,17 @@ export class AgentsService {
   /**
    * Get a specific agent run result
    */
-  async getRunResult(datasetId: string, runId: string) {
+  async getRunResult(userId: string, datasetId: string, runId: string) {
     // Verify dataset exists
     const dataset = await this.prisma.dataset.findUnique({
       where: { id: datasetId },
     });
 
     if (!dataset) {
+      throw new NotFoundException(`Dataset ${datasetId} not found`);
+    }
+
+    if (dataset.userId !== userId) {
       throw new NotFoundException(`Dataset ${datasetId} not found`);
     }
 
@@ -409,7 +422,7 @@ export class AgentsService {
   /**
    * Generate synthetic data based on synthesis agent results
    */
-  async generateSyntheticData(datasetId: string, runId: string) {
+  async generateSyntheticData(userId: string, datasetId: string, runId: string) {
     // Verify run exists
     const run = await this.prisma.agentRun.findFirst({
       where: {
@@ -435,6 +448,10 @@ export class AgentsService {
     });
 
     if (!dataset) {
+      throw new NotFoundException(`Dataset ${datasetId} not found`);
+    }
+
+    if (dataset.userId !== userId) {
       throw new NotFoundException(`Dataset ${datasetId} not found`);
     }
 
@@ -660,10 +677,20 @@ export class AgentsService {
    * Stores evaluation, compliance, synthesis, validation results
    */
   async saveAnalysis(
+    userId: string,
     datasetId: string,
     runId: string,
     analysisData: Record<string, unknown>,
   ) {
+    const dataset = await this.prisma.dataset.findUnique({
+      where: { id: datasetId },
+      select: { id: true, userId: true },
+    });
+
+    if (!dataset || dataset.userId !== userId) {
+      throw new NotFoundException(`Dataset ${datasetId} not found`);
+    }
+
     // Verify run exists
     const run = await this.prisma.agentRun.findFirst({
       where: {
@@ -696,9 +723,19 @@ export class AgentsService {
    * Retrieve saved analysis state from database
    */
   async getAnalysis(
+    userId: string,
     datasetId: string,
     runId: string,
   ) {
+    const dataset = await this.prisma.dataset.findUnique({
+      where: { id: datasetId },
+      select: { id: true, userId: true },
+    });
+
+    if (!dataset || dataset.userId !== userId) {
+      throw new NotFoundException(`Dataset ${datasetId} not found`);
+    }
+
     // Verify run exists
     const run = await this.prisma.agentRun.findFirst({
       where: {
@@ -723,9 +760,19 @@ export class AgentsService {
    * Return a presigned URL for previously generated synthetic data.
    */
   async getSyntheticDownload(
+    userId: string,
     datasetId: string,
     runId: string,
   ) {
+    const dataset = await this.prisma.dataset.findUnique({
+      where: { id: datasetId },
+      select: { id: true, userId: true },
+    });
+
+    if (!dataset || dataset.userId !== userId) {
+      throw new NotFoundException(`Dataset ${datasetId} not found`);
+    }
+
     const run = await this.prisma.agentRun.findFirst({
       where: {
         id: runId,

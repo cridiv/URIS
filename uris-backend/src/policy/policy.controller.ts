@@ -1,6 +1,7 @@
 import {
-  Controller, Post, Body, HttpCode, HttpStatus, Logger,
+  Controller, Post, Body, HttpCode, HttpStatus, Logger, UseGuards,
 } from '@nestjs/common';
+import { AuthGuard } from '@nestjs/passport';
 import {
   IsString, IsArray, IsOptional, IsIn, ValidateNested, IsNotEmpty,
 } from 'class-validator';
@@ -87,6 +88,7 @@ export class AttachPolicyDto {
 // ── Controller ────────────────────────────────────────────────────────────────
 
 @Controller('policy')
+@UseGuards(AuthGuard('jwt'))
 export class PolicyController {
   private readonly logger = new Logger(PolicyController.name);
 
@@ -108,7 +110,7 @@ export class PolicyController {
       `directives: ${dto.resolved_directives.length}`,
     );
 
-    const policyConfig = this.policyService.attachPolicyConfig(dto);
+    const policyConfig = await this.policyService.attachPolicyConfig(dto);
 
     return {
       status:     'accepted',

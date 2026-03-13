@@ -4,21 +4,30 @@ import {
   Get,
   Param,
   Body,
+  Req,
   UploadedFile,
   UseInterceptors,
+  UseGuards,
   BadRequestException,
   HttpCode,
   HttpStatus,
 } from '@nestjs/common';
+import { AuthGuard } from '@nestjs/passport';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { memoryStorage } from 'multer';
 import { DatasetService } from './dataset.service';
 import { ImportFromS3Dto, DatasetResponse } from './dto/dataset.dto';
+import type { Request } from 'express';
+
+interface AuthenticatedRequest extends Request {
+  user: { id: string; email?: string };
+}
 
 // 500 MB cap for server-proxied uploads
 const MAX_UPLOAD_BYTES = 500 * 1024 * 1024;
 
 @Controller('dataset')
+@UseGuards(AuthGuard('jwt'))
 export class DatasetController {
   constructor(private readonly datasetService: DatasetService) {}
 
@@ -36,12 +45,13 @@ export class DatasetController {
     }),
   )
   async upload(
+    @Req() req: AuthenticatedRequest,
     @UploadedFile() file: Express.Multer.File,
   ): Promise<DatasetResponse> {
     if (!file) {
       throw new BadRequestException('No file provided. Send the file under the "file" field.');
     }
-    return this.datasetService.ingestUpload(file);
+    return this.datasetService.ingestUpload(req.user.id, file);
   }
 
   /**
@@ -53,8 +63,11 @@ export class DatasetController {
    */
   @Post('import-s3')
   @HttpCode(HttpStatus.OK)
-  async importFromS3(@Body() dto: ImportFromS3Dto): Promise<DatasetResponse> {
-    return this.datasetService.ingestFromS3(dto);
+  async importFromS3(
+    @Req() req: AuthenticatedRequest,
+    @Body() dto: ImportFromS3Dto,
+  ): Promise<DatasetResponse> {
+    return this.datasetService.ingestFromS3(req.user.id, dto);
   }
 
   /**
@@ -62,8 +75,8 @@ export class DatasetController {
    * List all datasets (most recent first).
    */
   @Get()
-  async findAll(): Promise<DatasetResponse[]> {
-    return this.datasetService.findAll();
+  async findAll(@Req() req: AuthenticatedRequest): Promise<DatasetResponse[]> {
+    return this.datasetService.findAll(req.user.id);
   }
 
   /**
@@ -71,7 +84,10 @@ export class DatasetController {
    * Get a single dataset by ID.
    */
   @Get(':id')
-  async findOne(@Param('id') id: string): Promise<DatasetResponse> {
-    return this.datasetService.findOne(id);
+  async findOne(
+    @Req() req: AuthenticatedRequest,
+    @Param('id') id: string,
+  ): Promise<DatasetResponse> {
+    return this.datasetService.findOne(req.user.id, id);
   }
 }

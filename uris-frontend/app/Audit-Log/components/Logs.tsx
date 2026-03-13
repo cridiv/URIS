@@ -514,8 +514,8 @@ export default function Logs({ datasetId: propDatasetId, runId: propRunId }: { d
       setError(null);
       try {
         const [runRes, datasetRes] = await Promise.all([
-          fetch(`${API_BASE}/agents/${datasetId}/runs/${runId}`),
-          fetch(`${API_BASE}/dataset/${datasetId}`),
+          fetch(`${API_BASE}/agents/${datasetId}/runs/${runId}`, { credentials: "include" }),
+          fetch(`${API_BASE}/dataset/${datasetId}`, { credentials: "include" }),
         ]);
 
         if (!runRes.ok) throw new Error(`Failed to load run (${runRes.status})`);
@@ -573,7 +573,9 @@ export default function Logs({ datasetId: propDatasetId, runId: propRunId }: { d
     setDownloadError(null);
 
     try {
-      const response = await fetch(`${API_BASE}/agents/${datasetId}/runs/${runId}/download-synthetic`);
+      const response = await fetch(`${API_BASE}/agents/${datasetId}/runs/${runId}/download-synthetic`, {
+        credentials: "include",
+      });
       const data = await response.json().catch(() => ({}));
 
       if (!response.ok) {

@@ -117,6 +117,7 @@ function S3Modal({ onClose, onBack }: { onClose: () => void; onBack: () => void 
     try {
       const res = await fetch(`${API_BASE}/s3/connect`, {
         method: "POST",
+        credentials: "include",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(creds),
       });
@@ -130,6 +131,7 @@ function S3Modal({ onClose, onBack }: { onClose: () => void; onBack: () => void 
       // Immediately list objects in the bucket
       const objRes = await fetch(`${API_BASE}/s3/objects`, {
         method: "POST",
+        credentials: "include",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(creds),
       });
@@ -152,6 +154,7 @@ function S3Modal({ onClose, onBack }: { onClose: () => void; onBack: () => void 
     try {
       const res = await fetch(`${API_BASE}/dataset/import-s3`, {
         method: "POST",
+        credentials: "include",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ 
           ...creds, 
@@ -444,6 +447,7 @@ export default function ImportModal({ onClose }: { onClose: () => void }) {
 
       const response = await fetch(`${API_BASE}/dataset/upload`, {
         method: 'POST',
+        credentials: 'include',
         body: formData,
       });
 

@@ -199,7 +199,7 @@ export default function DatasetsPage() {
     setLoading(true);
     setError(null);
     try {
-      const res = await fetch(`${API_BASE}/dataset`);
+      const res = await fetch(`${API_BASE}/dataset`, { credentials: "include" });
       if (!res.ok) throw new Error(`Server returned ${res.status}`);
       const data: Dataset[] = await res.json();
       setDatasets(data);

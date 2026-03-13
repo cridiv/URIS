@@ -11,22 +11,25 @@ export default function AuthCallbackPage() {
 
   useEffect(() => {
     const token = searchParams.get("token");
-
-    if (!token) {
-      router.replace("/Signin?error=missing_token");
-      return;
-    }
-
-    // Persist the JWT so authenticated API calls can use it later.
-    localStorage.setItem("uris_access_token", token);
+    console.debug("[auth-callback] entered", { hasToken: Boolean(token) });
 
     const validateToken = async () => {
       try {
+        if (token) {
+          // Legacy token callback path support.
+          localStorage.setItem("uris_access_token", token);
+        }
+
         const response = await fetch(`${API_BASE}/auth/me`, {
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
+          credentials: "include",
+          headers: token
+            ? {
+                Authorization: `Bearer ${token}`,
+              }
+            : undefined,
         });
+
+        console.debug("[auth-callback] /auth/me response", { status: response.status, ok: response.ok });
 
         if (!response.ok) {
           throw new Error("Token validation failed");
@@ -34,8 +37,10 @@ export default function AuthCallbackPage() {
 
         const user = await response.json();
         localStorage.setItem("uris_user", JSON.stringify(user));
+        console.debug("[auth-callback] auth verified; redirecting to /Datasets");
         router.replace("/Datasets");
-      } catch {
+      } catch (error) {
+        console.error("[auth-callback] validation failed", error);
         localStorage.removeItem("uris_access_token");
         localStorage.removeItem("uris_user");
         router.replace("/Signin?error=invalid_token");

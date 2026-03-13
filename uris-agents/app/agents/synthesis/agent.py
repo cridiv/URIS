@@ -4,7 +4,7 @@ import pandas as pd
 from typing import Dict, Any, Optional
 from ...utils.bedrock import invoke_nova
 from .prompt import SYNTHESIS_SYSTEM_PROMPT
-from ...utils.synthesizer import run_synthesis, get_identifier_columns
+from ...utils.synthesizer import run_synthesis, get_identifier_columns, apply_tokenisation
 from ...utils.privacy_checker import run_privacy_check
 from ...utils.correlation_checker import run_correlation_check
 
@@ -28,6 +28,7 @@ def _fix_json_string(s: str) -> str:
 def prepare_synthesis_input(
     evaluation: Dict,
     compliance: Dict,
+    plan: Optional[Dict],
     task_type: str,
     target_column: Optional[str] = None,
     rejection_context: Optional[Dict] = None,
@@ -47,6 +48,15 @@ def prepare_synthesis_input(
     payload = {
         "task_type": task_type,
         "target_column": target_column,
+        "planner_summary": {
+            "objective": plan.get("objective") if plan else None,
+            "constraints": plan.get("constraints", []) if plan else [],
+            "risk_tolerance": plan.get("risk_tolerance") if plan else None,
+            "synthesis_task": next(
+                (task for task in plan.get("ordered_tasks", []) if task.get("agent") == "synthesis"),
+                None,
+            ) if plan else None,
+        },
         "evaluation_summary": {
             "adfi": evaluation.get("adfi"),
             "balance": balance,
@@ -84,6 +94,7 @@ def _enforce_compliance(strategy_decision: Dict, compliance: Dict) -> Dict:
     Nova is advisory — compliance is mandatory.
     """
     blocked = compliance.get("blocked_columns", [])
+    masked  = compliance.get("masked_columns", [])
     recommended_actions = compliance.get("recommended_actions", [])
 
     extractions = [
@@ -91,8 +102,9 @@ def _enforce_compliance(strategy_decision: Dict, compliance: Dict) -> Dict:
         if a.get("action") == "extract_then_drop"
     ]
 
-    strategy_decision["columns_to_exclude"] = blocked
+    strategy_decision["columns_to_exclude"]      = blocked
     strategy_decision["columns_to_extract_first"] = extractions
+    strategy_decision["columns_to_mask"]          = masked
 
     return strategy_decision
 
@@ -128,6 +140,7 @@ def run_synthesis_agent(
     dataset_path: str,
     evaluation: Dict,
     compliance: Dict,
+    plan: Optional[Dict],
     task_type: str,
     target_column: Optional[str] = None,
     max_retries: int = 3,
@@ -154,16 +167,28 @@ def run_synthesis_agent(
         starting_budget = 600
 
     current_budget = starting_budget
-    
+
     # Read CSV with explicit comma delimiter (most common for URIS datasets)
     try:
         raw_df = pd.read_csv(dataset_path, sep=",")
     except Exception:
-        # Fallback to auto-detection if comma fails
         raw_df = pd.read_csv(dataset_path)
 
+    # Apply tokenisation to MASK-policy columns before ANY further processing.
+    # This ensures original_df (used for privacy/correlation checks) uses the
+    # same token values as the synthesized output, making comparisons fair.
+    masked_columns = [c for c in compliance.get("masked_columns", []) if c in raw_df.columns]
+    if masked_columns:
+        raw_df, _ = apply_tokenisation(raw_df, masked_columns)
+        trace.append(f"Tokenised {len(masked_columns)} MASK-policy column(s): {masked_columns}")
+
     blocked_columns = compliance.get("blocked_columns", [])
-    identifier_cols = get_identifier_columns(raw_df)
+    # Exclude masked columns from identifier detection — they were already tokenised
+    # and are intentionally kept in the dataset.
+    identifier_cols = [
+        c for c in get_identifier_columns(raw_df)
+        if c not in masked_columns
+    ]
     cols_to_remove = list(set(identifier_cols + blocked_columns))
 
     original_df = raw_df.drop(
@@ -183,6 +208,7 @@ def run_synthesis_agent(
     input_payload = prepare_synthesis_input(
         evaluation=evaluation,
         compliance=compliance,
+        plan=plan,
         task_type=task_type,
         target_column=target_column,
         rejection_context=rejection_context,

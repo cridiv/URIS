@@ -5,9 +5,11 @@ import {
   Body,
   Query,
   Param,
+  UseGuards,
   HttpCode,
   HttpStatus,
 } from '@nestjs/common';
+import { AuthGuard } from '@nestjs/passport';
 import { S3Service } from './s3.service';
 import {
   ConnectS3Dto,
@@ -20,6 +22,7 @@ import {
 } from './dto/s3.dto';
 
 @Controller('s3')
+@UseGuards(AuthGuard('jwt'))
 export class S3Controller {
   constructor(private readonly s3Service: S3Service) {}
 

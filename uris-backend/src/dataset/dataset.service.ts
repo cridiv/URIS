@@ -2,7 +2,7 @@ import {
   Injectable,
   Logger,
   BadRequestException,
-  InternalServerErrorException,
+  NotFoundException,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { S3Client, GetObjectCommand, HeadObjectCommand } from '@aws-sdk/client-s3';
@@ -28,7 +28,7 @@ export class DatasetService {
 
   // ── Upload from local file (multipart form) ───────────────────────────────
 
-  async ingestUpload(file: Express.Multer.File): Promise<DatasetResponse> {
+  async ingestUpload(userId: string, file: Express.Multer.File): Promise<DatasetResponse> {
     this.validateExtension(file.originalname);
 
     const s3Key = this.buildS3Key(file.originalname);
@@ -36,6 +36,7 @@ export class DatasetService {
     // 1. Create a pending record so we have an ID immediately
     const record = await this.prisma.dataset.create({
       data: {
+        userId,
         name: file.originalname,
         s3Key,
         s3Bucket: this.storage.getBucket(),
@@ -51,7 +52,7 @@ export class DatasetService {
 
   // ── Import from user's own S3 bucket ─────────────────────────────────────
 
-  async ingestFromS3(dto: ImportFromS3Dto): Promise<DatasetResponse> {
+  async ingestFromS3(userId: string, dto: ImportFromS3Dto): Promise<DatasetResponse> {
     this.validateExtension(dto.key);
 
     // Build a temporary client scoped to the user's bucket
@@ -95,6 +96,7 @@ export class DatasetService {
 
     const record = await this.prisma.dataset.create({
       data: {
+        userId,
         name: fileName,
         s3Key,
         s3Bucket: this.storage.getBucket(),
@@ -165,8 +167,9 @@ export class DatasetService {
 
   // ── List all datasets ─────────────────────────────────────────────────────
 
-  async findAll(): Promise<DatasetResponse[]> {
+  async findAll(userId: string): Promise<DatasetResponse[]> {
     const datasets = await this.prisma.dataset.findMany({
+      where: { userId },
       orderBy: { createdAt: 'desc' },
     });
     return datasets.map(this.serialize);
@@ -174,10 +177,15 @@ export class DatasetService {
 
   // ── Get one ───────────────────────────────────────────────────────────────
 
-  async findOne(id: string): Promise<DatasetResponse> {
-    const dataset = await this.prisma.dataset.findUniqueOrThrow({
-      where: { id },
+  async findOne(userId: string, id: string): Promise<DatasetResponse> {
+    const dataset = await this.prisma.dataset.findFirst({
+      where: { id, userId },
     });
+
+    if (!dataset) {
+      throw new NotFoundException(`Dataset ${id} not found`);
+    }
+
     return this.serialize(dataset);
   }
 
@@ -213,6 +221,7 @@ export class DatasetService {
   private serialize(d: Dataset): DatasetResponse {
     return {
       id: d.id,
+      userId: d.userId,
       name: d.name,
       s3Key: d.s3Key,
       sizeBytes: d.sizeBytes.toString(),

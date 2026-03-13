@@ -32,6 +32,7 @@ export class ImportFromS3Dto {
 /** Returned to the frontend after a successful ingest */
 export interface DatasetResponse {
   id: string;
+  userId?: string | null;
   name: string;
   s3Key: string;
   sizeBytes: string; // BigInt serialised as string

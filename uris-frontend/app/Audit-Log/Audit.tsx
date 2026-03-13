@@ -44,14 +44,14 @@ export default function AuditIndexPage() {
 		const load = async () => {
 			setLoading(true);
 			try {
-				const datasetRes = await fetch(`${API_BASE}/dataset`);
+				const datasetRes = await fetch(`${API_BASE}/dataset`, { credentials: "include" });
 				if (!datasetRes.ok) throw new Error("Failed to fetch datasets");
 				const baseDatasets = (await datasetRes.json()) as DatasetItem[];
 
 				const withRuns = await Promise.all(
 					baseDatasets.map(async (d) => {
 						try {
-							const runsRes = await fetch(`${API_BASE}/agents/${d.id}`);
+							const runsRes = await fetch(`${API_BASE}/agents/${d.id}`, { credentials: "include" });
 							if (!runsRes.ok) return { ...d, runs: [] as RunItem[] };
 							const payload = await runsRes.json();
 							const runs = Array.isArray(payload?.runs) ? (payload.runs as RunItem[]) : [];

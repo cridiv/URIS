@@ -1,62 +1,74 @@
-// prisma/schema.prisma
-
 generator client {
   provider = "prisma-client-js"
 }
 
 datasource db {
-  provider  = "postgresql"
-  url       = env("DATABASE_URL")
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
 }
 
 model Dataset {
-  id          String   @id @default(cuid())
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
-  name        String               // original filename
-  s3Key       String   @unique     // path in your S3 bucket
-  s3Bucket    String               // bucket name
-  mimeType    String               // text/csv, application/json, etc.
-  sizeBytes   BigInt               // raw file size
-  source      String   @default("upload")
-  sourceKey   String?  // original key if imported from external S3
+  id          String     @id @default(cuid())
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
+  name        String
+  s3Key       String     @unique
+  s3Bucket    String
+  mimeType    String
+  sizeBytes   BigInt
+  source      String     @default("upload")
+  sourceKey   String?
   rowCount    Int?
   columnCount Int?
-  columns     Json?    // [{ name, dtype, nullCount, uniqueCount }]
-  profileMeta Json?    // any extra stats the profiler returns
-  status      String   @default("pending")
+  columns     Json?
+  profileMeta Json?
+  status      String     @default("pending")
   errorMsg    String?
-  runs        AgentRun[] // one-to-many relation
+  userId      String?
+  runs        AgentRun[]
+  user        User?      @relation(fields: [userId], references: [id])
 
+  @@index([userId])
   @@map("datasets")
 }
 
 model AgentRun {
-  id          String   @id @default(cuid())
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
-  datasetId   String
-  dataset     Dataset  @relation(fields: [datasetId], references: [id], onDelete: Cascade)
-  status      String   @default("analyzing") // analyzing, completed, failed
-  adfiScore   Float?   // filled after evaluation
-  complianceStatus String? // passed, failed, warning
-  task        String?  // binary_classification, regression, etc.
-  result      Json?    // full orchestration result
-  analysis    Json?    // saved analysis state { evaluation, compliance, synthesis, validation }
-  syntheticDataS3Key String?  // s3 path to generated synthetic CSV file
-  errorMsg    String?
+  id                 String   @id @default(cuid())
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+  datasetId          String
+  status             String   @default("analyzing")
+  adfiScore          Float?
+  complianceStatus   String?
+  task               String?
+  result             Json?
+  analysis           Json?
+  syntheticDataS3Key String?
+  errorMsg           String?
+  dataset            Dataset  @relation(fields: [datasetId], references: [id], onDelete: Cascade)
 
-  @@map("agent_runs")
   @@index([datasetId])
+  @@map("agent_runs")
 }
 
 model User {
-  id        String   @id @default(cuid())
-  email     String   @unique
-  googleId  String?  @unique
+  id        String    @id @default(cuid())
+  email     String    @unique
+  googleId  String?   @unique
   firstName String?
   lastName  String?
   picture   String?
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  datasets  Dataset[]
+}
+
+model PolicyConfig {
+  id          String   @id @default(cuid())
+  datasetId   String   @unique   // "global" or a real dataset cuid
+  config      Json                // StoredPolicyConfig shape
+  attachedAt  DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@map("policy_configs")
 }

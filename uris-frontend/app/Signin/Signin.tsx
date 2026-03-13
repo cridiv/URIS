@@ -7,6 +7,7 @@ import { useSearchParams } from "next/navigation";
 import { Loader2 } from "lucide-react";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:5000";
+const SESSION_KEY = "uris_auth_verified";
 
 const SignIn = () => {
   const searchParams = useSearchParams();
@@ -14,7 +15,14 @@ const SignIn = () => {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
+    // Clear any stale auth cache when the user arrives at the sign-in page
+    // (covers logout, session expiry, and explicit sign-out flows).
+    try { sessionStorage.removeItem(SESSION_KEY); } catch {}
+
     const authError = searchParams.get("error");
+    if (authError) {
+      console.warn("[signin] auth error query param", { authError });
+    }
 
     if (authError === "missing_token") {
       setError("No token was returned from Google login. Please try again.");
@@ -29,6 +37,7 @@ const SignIn = () => {
   const handleGoogleLogin = () => {
     setLoading("google");
     setError(null);
+    console.debug("[signin] redirecting to backend google auth", { url: `${API_BASE}/auth/google` });
     window.location.href = `${API_BASE}/auth/google`;
   };
 
