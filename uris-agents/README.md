@@ -11,7 +11,7 @@ Python microservice powering the URIS (Unified Reasoning Intelligence System) mu
 ```bash
 python -m venv venv
 source venv/bin/activate  # Windows: venv\Scripts\activate
-pip install fastapi uvicorn boto3 python-dotenv pandas numpy chardet
+pip install -r requirements.txt
 ```
 
 Create `.env`:
@@ -24,6 +24,12 @@ AWS_REGION=us-east-1
 Run:
 ```bash
 uvicorn app.main:app --reload --port 8000
+```
+
+Production run:
+```bash
+pip install -r requirements.txt
+uvicorn app.main:app --host 0.0.0.0 --port 8000
 ```
 
 ## Endpoints

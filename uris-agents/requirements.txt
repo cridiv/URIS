@@ -1,0 +1,16 @@
+fastapi
+uvicorn[standard]
+python-multipart
+pydantic
+
+pandas
+numpy
+scipy
+scikit-learn
+sdv
+gower
+
+boto3
+python-dotenv
+requests
+chardet
