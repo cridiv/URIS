@@ -1,5 +1,5 @@
 "use client";
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, type MouseEvent } from "react";
 import PipelinePanel from "./AuditPanel";
 
 // ── Design tokens ─────────────────────────────────────────────────────────────
@@ -14,6 +14,7 @@ const C = {
   ink900:        "#0F1117",
   ink600:        "#3A3D4A",
   ink400:        "#6B7080",
+  ink300:        "#8B949E",
   ink200:        "#B0B4C1",
   ink100:        "#D8DAE5",
   ink50:         "#EDEEF4",
@@ -45,9 +46,11 @@ function TypedHeadline() {
       return () => clearTimeout(t);
     }
     if (deleting && charIdx === 0) {
-      setWordIdx(i => (i + 1) % HEADLINE_WORDS.length);
-      setDeleting(false);
-      return;
+      const t = setTimeout(() => {
+        setWordIdx(i => (i + 1) % HEADLINE_WORDS.length);
+        setDeleting(false);
+      }, 0);
+      return () => clearTimeout(t);
     }
     const speed = deleting ? 36 : charIdx === 0 ? 340 : 58;
     const t = setTimeout(() => setCharIdx(c => c + (deleting ? -1 : 1)), speed);
@@ -67,13 +70,14 @@ function TypedHeadline() {
 }
 
 // ── Ticker ────────────────────────────────────────────────────────────────────
-function Ticker({ to, duration = 1600, decimals = 0 }) {
+function Ticker({ to, duration = 1600, decimals = 0 }: { to: number; duration?: number; decimals?: number }) {
   const [val, setVal] = useState(0);
-  const startRef = useRef(null);
+  const startRef = useRef<number | null>(null);
   useEffect(() => {
-    const step = ts => {
+    const step = (ts: number) => {
       if (!startRef.current) startRef.current = ts;
-      const p = Math.min((ts - startRef.current) / duration, 1);
+      const start = startRef.current ?? ts;
+      const p = Math.min((ts - start) / duration, 1);
       setVal((1 - Math.pow(1 - p, 3)) * to);
       if (p < 1) requestAnimationFrame(step);
     };
@@ -163,8 +167,8 @@ function Nav() {
             fontFamily: "IBM Plex Sans, sans-serif", fontWeight: 500,
             transition: "color 0.14s",
           }}
-            onMouseEnter={e => e.target.style.color = C.ink900}
-            onMouseLeave={e => e.target.style.color = C.ink400}>
+            onMouseEnter={(e: MouseEvent<HTMLAnchorElement>) => e.currentTarget.style.color = C.ink900}
+            onMouseLeave={(e: MouseEvent<HTMLAnchorElement>) => e.currentTarget.style.color = C.ink400}>
             {l}
           </a>
         ))}
@@ -180,8 +184,8 @@ function Nav() {
           fontFamily: "IBM Plex Sans, sans-serif", fontWeight: 500,
           transition: "color 0.14s",
         }}
-          onMouseEnter={e => e.target.style.color = C.ink900}
-          onMouseLeave={e => e.target.style.color = C.ink400}>
+          onMouseEnter={(e: MouseEvent<HTMLAnchorElement>) => e.currentTarget.style.color = C.ink900}
+          onMouseLeave={(e: MouseEvent<HTMLAnchorElement>) => e.currentTarget.style.color = C.ink400}>
           Log in
         </a>
 
@@ -232,16 +236,19 @@ function StatsStrip() {
       value: 99.8, suffix: "%",  decimals: 1,
       label: "PII accuracy",
       color: C.violet,
+      sub: "direct identifier detection",
     },
     {
       value: 94.3, suffix: "",   decimals: 1,
       label: "data quality score",
       color: C.emerald,
+      sub: "fidelity after synthesis",
     },
     {
       value: 9.7,  suffix: "s",  decimals: 1,
       label: "avg runtime",
       color: C.amber,
+      sub: "4-agent pipeline wall time",
     },
   ];
 

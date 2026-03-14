@@ -1,5 +1,67 @@
 "use client";
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, type Dispatch, type ReactNode, type SetStateAction } from "react";
+
+type RuleTargetType = "col" | "any";
+type PolicyScope = "dataset" | "column";
+
+type DslRule = {
+  verb: string;
+  target: string;
+  targetType: RuleTargetType;
+  condition: string;
+};
+
+type EnforcementRule = {
+  verb: string;
+  target: string;
+  condition: string | null;
+  scope?: PolicyScope;
+};
+
+type BuiltInPolicy = {
+  id: string;
+  name: string;
+  fullName: string;
+  jurisdiction: string;
+  icon: string;
+  color: string;
+  bg: string;
+  border: string;
+  description: string;
+  rules: string[];
+  tags: string[];
+  enforcement: EnforcementRule[];
+};
+
+type CustomPolicy = {
+  id: string;
+  name: string;
+  description: string;
+  rules: string[];
+  _dsl: DslRule[];
+};
+
+type PolicyRecord = (BuiltInPolicy & { _type: "builtin" }) | (CustomPolicy & { _type: "custom" });
+
+type SessionState = {
+  attachedIds: Set<string>;
+  customPolicies: CustomPolicy[];
+  savedAt: string | null;
+};
+
+type PolicyTab = "attach" | "create";
+type SubmitState = "idle" | "sending" | "success" | "error";
+
+type SaveSessionInput = {
+  attachedIds: Set<string>;
+  customPolicies: CustomPolicy[];
+};
+
+type BuildPolicyPayloadInput = {
+  attachedIds: Set<string>;
+  allPolicies: PolicyRecord[];
+  datasetId: string;
+};
 
 // ── DSL Grammar ───────────────────────────────────────────────────────────────
 
@@ -131,11 +193,11 @@ const getSessionKey = () => `uris_policy_global`;
 //   savedAt:        ISO string        — last save timestamp (shown in UI)
 // }
 
-function loadSession() {
+function loadSession(): SessionState | null {
   try {
     const raw = localStorage.getItem(getSessionKey());
     if (!raw) return null;
-    const parsed = JSON.parse(raw);
+    const parsed = JSON.parse(raw) as Partial<{ attachedIds: string[]; customPolicies: CustomPolicy[]; savedAt: string | null }>;
     return {
       attachedIds:    new Set(parsed.attachedIds   || []),
       customPolicies: parsed.customPolicies || [],
@@ -146,7 +208,7 @@ function loadSession() {
   }
 }
 
-function saveSession({ attachedIds, customPolicies }) {
+function saveSession({ attachedIds, customPolicies }: SaveSessionInput) {
   try {
     localStorage.setItem(getSessionKey(), JSON.stringify({
       attachedIds:    [...attachedIds],
@@ -160,10 +222,10 @@ function saveSession({ attachedIds, customPolicies }) {
 
 // ── Payload builder ───────────────────────────────────────────────────────────
 
-function buildPolicyPayload({ attachedIds, allPolicies, datasetId }) {
+function buildPolicyPayload({ attachedIds, allPolicies, datasetId }: BuildPolicyPayloadInput) {
   const attached = allPolicies.filter(p => attachedIds.has(p.id));
 
-  const inferScopeFromTarget = (target) => {
+  const inferScopeFromTarget = (target: string | null | undefined): PolicyScope => {
     if (typeof target !== "string") return "dataset";
     return target.startsWith("col:") ? "column" : "dataset";
   };
@@ -214,7 +276,7 @@ function buildPolicyPayload({ attachedIds, allPolicies, datasetId }) {
 
 // ── Primitives ────────────────────────────────────────────────────────────────
 
-function Pill({ children, color, bg, border }) {
+function Pill({ children, color, bg, border }: { children: ReactNode; color: string; bg: string; border: string }) {
   return (
     <span style={{ fontSize: 10, fontFamily: "IBM Plex Mono, monospace", fontWeight: 700, color, background: bg, border: `1px solid ${border}`, borderRadius: 5, padding: "2px 7px", letterSpacing: "0.04em", whiteSpace: "nowrap" }}>
       {children}
@@ -222,7 +284,7 @@ function Pill({ children, color, bg, border }) {
   );
 }
 
-function Tag({ children, color = "#57606A", bg = "#F6F8FA", border = "#E1E4E8" }) {
+function Tag({ children, color = "#57606A", bg = "#F6F8FA", border = "#E1E4E8" }: { children: ReactNode; color?: string; bg?: string; border?: string }) {
   return (
     <span style={{ fontSize: 10.5, fontFamily: "IBM Plex Mono, monospace", fontWeight: 500, color, background: bg, border: `1px solid ${border}`, borderRadius: 5, padding: "2px 8px" }}>
       {children}
@@ -230,7 +292,7 @@ function Tag({ children, color = "#57606A", bg = "#F6F8FA", border = "#E1E4E8" }
   );
 }
 
-function SectionLabel({ children }) {
+function SectionLabel({ children }: { children: ReactNode }) {
   return (
     <div style={{ display: "flex", alignItems: "center", gap: 8, margin: "22px 0 12px" }}>
       <span style={{ fontSize: 9.5, fontFamily: "IBM Plex Mono, monospace", fontWeight: 700, letterSpacing: "0.1em", color: "#B1BAC4", textTransform: "uppercase", whiteSpace: "nowrap" }}>{children}</span>
@@ -239,14 +301,14 @@ function SectionLabel({ children }) {
   );
 }
 
-function ruleToString({ verb, target, condition }) {
+function ruleToString({ verb, target, condition }: Pick<DslRule, "verb" | "target" | "condition">) {
   if (!verb) return "";
   return `${verb} ${target || "…"}${condition ? ` IF ${condition}` : ""}`;
 }
 
 // ── Verb selector ─────────────────────────────────────────────────────────────
 
-function VerbSelector({ value, onChange }) {
+function VerbSelector({ value, onChange }: { value: string; onChange: (value: string) => void }) {
   return (
     <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
       {VERBS.map(v => (
@@ -261,7 +323,14 @@ function VerbSelector({ value, onChange }) {
 
 // ── Rule row ──────────────────────────────────────────────────────────────────
 
-function RuleRow({ rule, index, onChange, onRemove, colSearch, setColSearch }) {
+function RuleRow({ rule, index, onChange, onRemove, colSearch, setColSearch }: {
+  rule: DslRule;
+  index: number;
+  onChange: (rule: DslRule) => void;
+  onRemove: () => void;
+  colSearch: Record<number, string>;
+  setColSearch: Dispatch<SetStateAction<Record<number, string>>>;
+}) {
   const [showColDrop, setShowColDrop]   = useState(false);
   const [showCondDrop, setShowCondDrop] = useState(false);
   const verbMeta    = VERBS.find(v => v.id === rule.verb);
@@ -286,7 +355,7 @@ function RuleRow({ rule, index, onChange, onRemove, colSearch, setColSearch }) {
             <div style={{ flex: "0 0 200px", position: "relative" }}>
               <div style={{ fontSize: 9.5, fontFamily: "IBM Plex Mono, monospace", fontWeight: 700, color: "#B1BAC4", textTransform: "uppercase", letterSpacing: "0.09em", marginBottom: 6 }}>Target</div>
               <div style={{ display: "flex", gap: 0, border: "1px solid #E1E4E8", borderRadius: 8, overflow: "hidden", background: "#FAFBFC" }}>
-                <select value={rule.targetType || "col"} onChange={e => onChange({ ...rule, targetType: e.target.value, target: "" })}
+                <select value={rule.targetType || "col"} onChange={e => onChange({ ...rule, targetType: e.target.value as RuleTargetType, target: "" })}
                   style={{ height: 34, padding: "0 8px", border: "none", borderRight: "1px solid #E1E4E8", background: "#F6F8FA", fontSize: 11, fontFamily: "IBM Plex Mono, monospace", fontWeight: 700, color: "#57606A", outline: "none", cursor: "pointer" }}>
                   <option value="col">col:</option>
                   <option value="any">any</option>
@@ -389,16 +458,16 @@ function RuleRow({ rule, index, onChange, onRemove, colSearch, setColSearch }) {
 
 // ── DSL Policy builder ────────────────────────────────────────────────────────
 
-function DSLPolicyBuilder({ onCreate }) {
+function DSLPolicyBuilder({ onCreate }: { onCreate: (policy: Omit<CustomPolicy, "id">) => void }) {
   const [name, setName]           = useState("");
   const [description, setDesc]    = useState("");
-  const [rules, setRules]         = useState([{ verb: "", target: "", targetType: "col", condition: "" }]);
+  const [rules, setRules]         = useState<DslRule[]>([{ verb: "", target: "", targetType: "col", condition: "" }]);
   const [error, setError]         = useState("");
-  const [colSearch, setColSearch] = useState({});
+  const [colSearch, setColSearch] = useState<Record<number, string>>({});
 
   const addRule    = () => setRules(r => [...r, { verb: "", target: "", targetType: "col", condition: "" }]);
-  const updateRule = (i, v) => setRules(r => r.map((x, j) => j === i ? v : x));
-  const removeRule = (i) => setRules(r => r.filter((_, j) => j !== i));
+  const updateRule = (i: number, v: DslRule) => setRules(r => r.map((x, j) => j === i ? v : x));
+  const removeRule = (i: number) => setRules(r => r.filter((_, j) => j !== i));
 
   const handleCreate = () => {
     if (!name.trim()) { setError("Policy name is required."); return; }
@@ -499,7 +568,7 @@ function DSLPolicyBuilder({ onCreate }) {
 
 // ── Built-in card ─────────────────────────────────────────────────────────────
 
-function BuiltInCard({ policy, attached, onToggle }) {
+function BuiltInCard({ policy, attached, onToggle }: { policy: BuiltInPolicy; attached: boolean; onToggle: () => void }) {
   const [expanded, setExpanded] = useState(false);
   return (
     <div style={{ background: "#fff", border: `1px solid ${attached ? policy.border : "#E1E4E8"}`, borderRadius: 14, boxShadow: attached ? `0 0 0 3px ${policy.bg}` : "0 1px 3px rgba(0,0,0,0.05)", overflow: "hidden", transition: "all 0.2s" }}>
@@ -547,7 +616,7 @@ function BuiltInCard({ policy, attached, onToggle }) {
 
 // ── Custom policy card ────────────────────────────────────────────────────────
 
-function CustomPolicyCard({ policy, attached, onToggle, onDelete }) {
+function CustomPolicyCard({ policy, attached, onToggle, onDelete }: { policy: CustomPolicy; attached: boolean; onToggle: () => void; onDelete: () => void }) {
   const [expanded, setExpanded] = useState(false);
   return (
     <div style={{ background: "#fff", border: `1px solid ${attached ? "#DBEAFE" : "#E1E4E8"}`, borderRadius: 14, boxShadow: attached ? "0 0 0 3px #EFF6FF" : "0 1px 3px rgba(0,0,0,0.05)", overflow: "hidden", transition: "all 0.2s" }}>
@@ -610,7 +679,7 @@ function CustomPolicyCard({ policy, attached, onToggle, onDelete }) {
 
 // ── Attached summary ──────────────────────────────────────────────────────────
 
-function AttachedSummary({ attached, savedAt }) {
+function AttachedSummary({ attached, savedAt }: { attached: PolicyRecord[]; savedAt: string | null }) {
   if (attached.length === 0) return null;
 
   const savedLabel = savedAt
@@ -634,7 +703,7 @@ function AttachedSummary({ attached, savedAt }) {
 
 // ── Run button / submit area ──────────────────────────────────────────────────
 
-function RunPipelineBar({ onSubmit, submitState, onClearSession }) {
+function RunPipelineBar({ onSubmit, submitState, onClearSession }: { onSubmit: () => void; submitState: SubmitState; onClearSession: () => void }) {
   return (
     <div style={{ position: "sticky", bottom: 0, background: "rgba(244,245,247,0.95)", backdropFilter: "blur(8px)", borderTop: "1px solid #E1E4E8", padding: "14px 32px", display: "flex", alignItems: "center", justifyContent: "space-between", marginLeft: -32, marginRight: -32 }}>
       <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
@@ -664,11 +733,11 @@ export default function PolicyPage() {
   // client immediately overwrites it — causing a layout shift and React
   // hydration mismatch warning.
   const [hydrated, setHydrated]           = useState(false);
-  const [attachedIds, setAttachedIds]     = useState(new Set(["gdpr"]));
-  const [customPolicies, setCustomPolicies] = useState([]);
-  const [savedAt, setSavedAt]             = useState(null);
-  const [tab, setTab]                     = useState("attach");
-  const [submitState, setSubmitState]     = useState("idle");
+  const [attachedIds, setAttachedIds]     = useState<Set<string>>(new Set(["gdpr"]));
+  const [customPolicies, setCustomPolicies] = useState<CustomPolicy[]>([]);
+  const [savedAt, setSavedAt]             = useState<string | null>(null);
+  const [tab, setTab]                     = useState<PolicyTab>("attach");
+  const [submitState, setSubmitState]     = useState<SubmitState>("idle");
 
   // Load persisted global policy session once on mount (client-side only)
   useEffect(() => {
@@ -691,7 +760,7 @@ export default function PolicyPage() {
     setSavedAt(new Date().toISOString());
   }, [attachedIds, customPolicies, hydrated]);
 
-  const toggle = (id) => setAttachedIds(prev => {
+  const toggle = (id: string) => setAttachedIds(prev => {
     const next = new Set(prev);
     if (next.has(id)) {
       next.delete(id);
@@ -701,28 +770,28 @@ export default function PolicyPage() {
     return next;
   });
 
-  const handleCreate = (p) => {
+  const handleCreate = (p: Omit<CustomPolicy, "id">) => {
     const id = `custom_${Date.now()}`;
     setCustomPolicies(prev => [...prev, { ...p, id }]);
     setAttachedIds(prev => new Set([...prev, id]));
     setTab("attach");
   };
 
-  const deleteCustom = (id) => {
+  const deleteCustom = (id: string) => {
     setCustomPolicies(prev => prev.filter(p => p.id !== id));
     setAttachedIds(prev => { const next = new Set(prev); next.delete(id); return next; });
   };
 
   const clearSession = () => {
-    try { localStorage.removeItem(getSessionKey(activeDatasetId)); } catch {}
+    try { localStorage.removeItem(getSessionKey()); } catch {}
     setAttachedIds(new Set(["gdpr"]));
     setCustomPolicies([]);
     setSavedAt(null);
   };
 
-  const allPolicies = [
-    ...BUILT_IN_POLICIES.map(p => ({ ...p, _type: "builtin" })),
-    ...customPolicies.map(p => ({ ...p, _type: "custom" })),
+  const allPolicies: PolicyRecord[] = [
+    ...BUILT_IN_POLICIES.map((p) => ({ ...p, _type: "builtin" as const })),
+    ...customPolicies.map((p) => ({ ...p, _type: "custom" as const })),
   ];
   const attached = allPolicies.filter(p => attachedIds.has(p.id));
 
@@ -752,7 +821,7 @@ export default function PolicyPage() {
     }
   };
 
-  const TABS = [
+  const TABS: Array<{ id: PolicyTab; label: string }> = [
     { id: "attach", label: "Attach Policies" },
     { id: "create", label: "Create Custom Policy" },
   ];

@@ -1,5 +1,5 @@
 "use client";
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, type CSSProperties, type MouseEvent, type ReactNode, type RefObject } from "react";
 
 // ── Design tokens (identical to HeroPage) ────────────────────────────────────
 const C = {
@@ -31,8 +31,8 @@ const C = {
 };
 
 // ── Scroll-reveal hook ────────────────────────────────────────────────────────
-function useReveal(threshold = 0.12) {
-  const ref = useRef(null);
+function useReveal(threshold = 0.12): [RefObject<HTMLDivElement | null>, boolean] {
+  const ref = useRef<HTMLDivElement | null>(null);
   const [visible, setVisible] = useState(false);
   useEffect(() => {
     const el = ref.current;
@@ -48,7 +48,7 @@ function useReveal(threshold = 0.12) {
 }
 
 // ── Section wrapper ───────────────────────────────────────────────────────────
-function Section({ children, style = {} }) {
+function Section({ children, style = {} }: { children: ReactNode; style?: CSSProperties }) {
   return (
     <section style={{
       padding: "100px 56px",
@@ -62,11 +62,7 @@ function Section({ children, style = {} }) {
   );
 }
 
-function SectionDivider() {
-  return <div style={{ height: 1, background: C.ink100, maxWidth: 1280, margin: "0 auto 0", padding: "0 56px" }}><div style={{ height: 1, background: C.ink100 }} /></div>;
-}
-
-function SectionLabel({ children }) {
+function SectionLabel({ children }: { children: ReactNode }) {
   return (
     <div style={{ display: "inline-flex", alignItems: "center", gap: 8, marginBottom: 18 }}>
       <div style={{ width: 18, height: 1.5, background: C.primary, borderRadius: 99 }} />
@@ -78,7 +74,7 @@ function SectionLabel({ children }) {
   );
 }
 
-function SectionHeading({ children, sub, maxWidth = 640 }) {
+function SectionHeading({ children, sub, maxWidth = 640 }: { children: ReactNode; sub?: ReactNode; maxWidth?: number }) {
   return (
     <div style={{ marginBottom: 56 }}>
       <h2 style={{
@@ -158,7 +154,7 @@ function HowItWorksSection() {
   const [ref, visible] = useReveal();
   return (
     <div style={{ background: C.surface, borderTop: `1px solid ${C.ink100}`, borderBottom: `1px solid ${C.ink100}` }}>
-      <Section ref={ref}>
+      <Section>
         <div ref={ref} style={{ opacity: visible ? 1 : 0, transform: visible ? "none" : "translateY(24px)", transition: "all 0.55s ease" }}>
           <SectionLabel>How it works</SectionLabel>
           <SectionHeading
@@ -188,7 +184,9 @@ function HowItWorksSection() {
   );
 }
 
-function StepCard({ step, index, parentVisible }) {
+type Step = (typeof STEPS)[number];
+
+function StepCard({ step, index, parentVisible }: { step: Step; index: number; parentVisible: boolean }) {
   const [hovered, setHovered] = useState(false);
   return (
     <div
@@ -396,15 +394,17 @@ function FeaturesSection() {
       </SectionHeading>
 
       <div style={{ display: "flex", flexDirection: "column", gap: 80 }}>
-        {FEATURES.map((f, i) => (
-          <FeatureRow key={f.tag} feature={f} index={i} />
+        {FEATURES.map((f) => (
+          <FeatureRow key={f.tag} feature={f} />
         ))}
       </div>
     </Section>
   );
 }
 
-function FeatureRow({ feature: f, index }) {
+type Feature = (typeof FEATURES)[number];
+
+function FeatureRow({ feature: f }: { feature: Feature }) {
   const [ref, visible] = useReveal(0.08);
   const reversed = f.reversed;
   return (
@@ -435,7 +435,7 @@ function FeatureRow({ feature: f, index }) {
           {f.body}
         </p>
         <ul style={{ listStyle: "none", padding: 0, margin: 0, display: "flex", flexDirection: "column", gap: 10 }}>
-          {f.bullets.map(b => (
+          {f.bullets.map((b: string) => (
             <li key={b} style={{ display: "flex", alignItems: "center", gap: 10, fontSize: 13.5, color: C.ink600, fontFamily: "IBM Plex Sans, sans-serif" }}>
               <div style={{ width: 18, height: 18, borderRadius: 5, background: f.tagBg, border: `1px solid ${f.tagBorder}`, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
                 <svg width="9" height="9" viewBox="0 0 24 24" fill="none"><path d="M20 6L9 17l-5-5" stroke={f.tagColor} strokeWidth="2.8" strokeLinecap="round" strokeLinejoin="round"/></svg>
@@ -553,7 +553,9 @@ function ComplianceSection() {
   );
 }
 
-function ComplianceCard({ fw, delay, parentVisible }) {
+type Framework = (typeof FRAMEWORKS)[number];
+
+function ComplianceCard({ fw, delay, parentVisible }: { fw: Framework; delay: number; parentVisible: boolean }) {
   const [hovered, setHovered] = useState(false);
   return (
     <div
@@ -580,7 +582,7 @@ function ComplianceCard({ fw, delay, parentVisible }) {
         <div style={{ width: 10, height: 10, borderRadius: 99, background: fw.color, marginTop: 4, boxShadow: `0 0 8px ${fw.color}55` }} />
       </div>
       <div style={{ display: "flex", flexDirection: "column", gap: 7 }}>
-        {fw.caps.map(cap => (
+        {fw.caps.map((cap: string) => (
           <div key={cap} style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 12.5, color: C.ink600, fontFamily: "IBM Plex Sans, sans-serif" }}>
             <div style={{ width: 4, height: 4, borderRadius: 99, background: fw.color, flexShrink: 0, opacity: 0.7 }} />
             {cap}
@@ -614,7 +616,7 @@ const FAQS = [
 ];
 
 function FAQSection() {
-  const [open, setOpen] = useState(null);
+  const [open, setOpen] = useState<number | null>(null);
   const [ref, visible] = useReveal();
   return (
     <div style={{ background: C.surface, borderTop: `1px solid ${C.ink100}`, borderBottom: `1px solid ${C.ink100}` }}>
@@ -636,7 +638,9 @@ function FAQSection() {
   );
 }
 
-function FAQItem({ faq, isOpen, onToggle, delay, parentVisible }) {
+type FAQ = (typeof FAQS)[number];
+
+function FAQItem({ faq, isOpen, onToggle, delay, parentVisible }: { faq: FAQ; isOpen: boolean; onToggle: () => void; delay: number; parentVisible: boolean }) {
   return (
     <div
       onClick={onToggle}
@@ -829,8 +833,8 @@ function Footer() {
                 fontSize: 12, fontFamily: "IBM Plex Mono, monospace", color: C.ink200,
                 textDecoration: "none", transition: "color 0.14s",
               }}
-                onMouseEnter={e => e.target.style.color = C.primary}
-                onMouseLeave={e => e.target.style.color = C.ink200}>
+                onMouseEnter={(e: MouseEvent<HTMLAnchorElement>) => e.currentTarget.style.color = C.primary}
+                onMouseLeave={(e: MouseEvent<HTMLAnchorElement>) => e.currentTarget.style.color = C.ink200}>
                 {l}
               </a>
             ))}

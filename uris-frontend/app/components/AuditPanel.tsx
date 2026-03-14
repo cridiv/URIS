@@ -1,23 +1,5 @@
 "use client";
-import { useState, useEffect, useRef } from "react";
-
-const DEMO_EVENTS = [
-  { ts: "09:00:00.000", agent: "system",     action: "RUN_INITIATED",         severity: "info",   outcome: "ok"   },
-  { ts: "09:00:01.204", agent: "evaluation", action: "SCHEMA_SCAN_COMPLETE",  severity: "info",   outcome: "ok"   },
-  { ts: "09:00:01.881", agent: "evaluation", action: "ADFI_BASELINE",         severity: "info",   outcome: "ok"   },
-  { ts: "09:00:02.340", agent: "evaluation", action: "CRITICAL_GAP_DETECTED", severity: "medium", outcome: "warn" },
-  { ts: "09:00:02.901", agent: "evaluation", action: "PII_DETECTED",          severity: "medium", outcome: "warn" },
-  { ts: "09:00:03.120", agent: "planner",    action: "TASK_QUEUE_BUILT",      severity: "info",   outcome: "ok"   },
-  { ts: "09:00:03.455", agent: "planner",    action: "PRIORITY_ORDERING",     severity: "info",   outcome: "ok"   },
-  { ts: "09:00:04.012", agent: "compliance", action: "COLUMN_BLOCKED",        severity: "high",   outcome: "fail" },
-  { ts: "09:00:04.210", agent: "compliance", action: "COLUMN_BLOCKED",        severity: "high",   outcome: "fail" },
-  { ts: "09:00:04.780", agent: "compliance", action: "GDPR_EXPOSURE",         severity: "medium", outcome: "warn" },
-  { ts: "09:00:05.001", agent: "compliance", action: "MANIFEST_RESOLVED",     severity: "info",   outcome: "ok"   },
-  { ts: "09:00:05.560", agent: "synthesis",  action: "SYNTHESIS_ATTEMPT",     severity: "info",   outcome: "ok"   },
-  { ts: "09:00:07.330", agent: "synthesis",  action: "DISTRIBUTION_CHECK",    severity: "info",   outcome: "ok"   },
-  { ts: "09:00:08.102", agent: "synthesis",  action: "REID_RISK_CHECK",       severity: "info",   outcome: "ok"   },
-  { ts: "09:00:09.441", agent: "synthesis",  action: "SYNTHESIS_COMPLETE",    severity: "info",   outcome: "ok"   },
-];
+import { useState, useEffect, useRef, type ReactNode } from "react";
 
 const AGENT_META = {
   system:     { label: "System",     color: "#6E7681", accent: "#6E7681" },
@@ -39,8 +21,42 @@ const SEVERITY_META = {
   high:   { label: "high",   color: "#B91C1C" },
 };
 
-function elapsed(ts, baseTs) {
-  const parse = s => {
+type AuditEvent = {
+  ts: string;
+  agent: keyof typeof AGENT_META;
+  action: string;
+  severity: keyof typeof SEVERITY_META;
+  outcome: keyof typeof OUTCOME_META;
+};
+
+type PipelinePanelProps = {
+  events?: AuditEvent[];
+  streamDelay?: number;
+  onComplete?: () => void;
+  filename?: string;
+  onReplay?: () => void;
+};
+
+const DEMO_EVENTS: AuditEvent[] = [
+  { ts: "09:00:00.000", agent: "system",     action: "RUN_INITIATED",         severity: "info",   outcome: "ok"   },
+  { ts: "09:00:01.204", agent: "evaluation", action: "SCHEMA_SCAN_COMPLETE",  severity: "info",   outcome: "ok"   },
+  { ts: "09:00:01.881", agent: "evaluation", action: "ADFI_BASELINE",         severity: "info",   outcome: "ok"   },
+  { ts: "09:00:02.340", agent: "evaluation", action: "CRITICAL_GAP_DETECTED", severity: "medium", outcome: "warn" },
+  { ts: "09:00:02.901", agent: "evaluation", action: "PII_DETECTED",          severity: "medium", outcome: "warn" },
+  { ts: "09:00:03.120", agent: "planner",    action: "TASK_QUEUE_BUILT",      severity: "info",   outcome: "ok"   },
+  { ts: "09:00:03.455", agent: "planner",    action: "PRIORITY_ORDERING",     severity: "info",   outcome: "ok"   },
+  { ts: "09:00:04.012", agent: "compliance", action: "COLUMN_BLOCKED",        severity: "high",   outcome: "fail" },
+  { ts: "09:00:04.210", agent: "compliance", action: "COLUMN_BLOCKED",        severity: "high",   outcome: "fail" },
+  { ts: "09:00:04.780", agent: "compliance", action: "GDPR_EXPOSURE",         severity: "medium", outcome: "warn" },
+  { ts: "09:00:05.001", agent: "compliance", action: "MANIFEST_RESOLVED",     severity: "info",   outcome: "ok"   },
+  { ts: "09:00:05.560", agent: "synthesis",  action: "SYNTHESIS_ATTEMPT",     severity: "info",   outcome: "ok"   },
+  { ts: "09:00:07.330", agent: "synthesis",  action: "DISTRIBUTION_CHECK",    severity: "info",   outcome: "ok"   },
+  { ts: "09:00:08.102", agent: "synthesis",  action: "REID_RISK_CHECK",       severity: "info",   outcome: "ok"   },
+  { ts: "09:00:09.441", agent: "synthesis",  action: "SYNTHESIS_COMPLETE",    severity: "info",   outcome: "ok"   },
+];
+
+function elapsed(ts: string, baseTs: string) {
+  const parse = (s: string) => {
     const [h, m, sec] = s.split(":").map(Number);
     return h * 3600 + m * 60 + sec;
   };
@@ -59,7 +75,7 @@ function Cursor() {
   );
 }
 
-function LogRow({ event, idx, baseTs, isLast, done }) {
+function LogRow({ event, idx, baseTs, isLast, done }: { event: AuditEvent; idx: number; baseTs: string; isLast: boolean; done: boolean }) {
   const om  = OUTCOME_META[event.outcome] ?? OUTCOME_META.ok;
   const am  = AGENT_META[event.agent]     ?? AGENT_META.system;
   const sm  = SEVERITY_META[event.severity] ?? SEVERITY_META.info;
@@ -161,7 +177,7 @@ function WaitingDots() {
   );
 }
 
-function ColHeader({ children, align = "left" }) {
+function ColHeader({ children, align = "left" }: { children: ReactNode; align?: "left" | "right" | "center" }) {
   return (
     <div style={{
       fontSize: 9, fontFamily: "IBM Plex Mono, monospace", fontWeight: 700,
@@ -214,17 +230,24 @@ export default function PipelinePanel({
   events: propEvents,
   streamDelay = 300,
   onComplete,
-}) {
+}: PipelinePanelProps) {
   const source    = propEvents ?? DEMO_EVENTS;
   const [visible, setVisible] = useState(0);
   const [done, setDone]       = useState(false);
-  const scrollRef             = useRef(null);
+  const scrollRef             = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
-    if (visible >= source.length) { setDone(true); onComplete?.(); return; }
+    if (visible >= source.length) {
+      if (done) return;
+      const t = setTimeout(() => {
+        setDone(true);
+        onComplete?.();
+      }, 0);
+      return () => clearTimeout(t);
+    }
     const t = setTimeout(() => setVisible(v => v + 1), streamDelay);
     return () => clearTimeout(t);
-  }, [visible, source.length, streamDelay]);
+  }, [done, onComplete, visible, source.length, streamDelay]);
 
   useEffect(() => {
     if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
