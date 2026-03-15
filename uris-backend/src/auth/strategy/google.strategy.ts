@@ -9,7 +9,7 @@ export class GoogleStrategy extends PassportStrategy(Strategy, 'google') {
   constructor(private config: ConfigService) {
     const clientID = config.get<string>('GOOGLE_CLIENT_ID');
     const clientSecret = config.get<string>('GOOGLE_CLIENT_SECRET');
-    const callbackURL = config.get<string>('GOOGLE_CALLBACK_URL') ?? 'http://localhost:5000/auth/google/callback';
+    const callbackURL = config.get<string>('GOOGLE_CALLBACK_URL') ?? 'https://uris.onrender.com/auth/google/callback';
 
     if (!clientID || !clientSecret) {
       throw new Error('Missing Google OAuth env vars: GOOGLE_CLIENT_ID/GOOGLE_CLIENT_SECRET');

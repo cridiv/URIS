@@ -7,7 +7,7 @@ import DatasetOverview from "./components/DatasetOverview";
 import AgentResult from "./components/AgentResult";
 import AgentAnalysis from "./components/AgentAnalysis";
 
-const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:5000";
+const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? "https://uris.onrender.com";
 
 interface Dataset {
   id: string;

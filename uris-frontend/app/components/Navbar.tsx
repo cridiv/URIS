@@ -3,7 +3,7 @@ import Image from "next/image";
 import { useEffect, useState } from "react";
 import AccountModal from "./AccountModal";
 
-const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:5000";
+const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? "https://uris.onrender.com";
 
 // ── URIS tokens ───────────────────────────────────────────────────────────────
 const C = {

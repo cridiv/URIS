@@ -15,7 +15,7 @@ async function bootstrap() {
   );
 
   // CORS — restrict to configured origins only
-  const allowedOrigins = (process.env.CORS_ORIGINS ?? 'http://localhost:3000')
+  const allowedOrigins = (process.env.CORS_ORIGINS ?? 'https://uris-nu.vercel.app/')
     .split(',')
     .map((o) => o.trim());
 

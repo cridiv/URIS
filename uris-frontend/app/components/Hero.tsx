@@ -1,4 +1,5 @@
 "use client";
+import Image from "next/image";
 import { useState, useEffect, useRef, type MouseEvent } from "react";
 import PipelinePanel from "./AuditPanel";
 
@@ -144,16 +145,14 @@ function Nav() {
 
       {/* Logo */}
       <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-        <div style={{
-          width: 32, height: 32, borderRadius: 9,
-          background: `linear-gradient(135deg, ${C.primary}, ${C.violet})`,
-          display: "flex", alignItems: "center", justifyContent: "center",
-          boxShadow: `0 0 18px ${C.primaryGlow}`,
-        }}>
-          <svg width="15" height="15" viewBox="0 0 24 24" fill="none">
-            <path d="M13 10V3L4 14h7v7l9-11h-7z" fill="#fff"/>
-          </svg>
-        </div>
+        <Image
+          src="/uris-logo.svg"
+          alt="URIS logo"
+          width={32}
+          height={32}
+          style={{ width: 32, height: 32, borderRadius: 9, flexShrink: 0 }}
+          priority
+        />
         <span style={{ fontSize: 15, fontWeight: 800, color: C.ink900, letterSpacing: "-0.03em", fontFamily: "IBM Plex Mono, monospace" }}>
           URIS
         </span>

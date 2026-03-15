@@ -3,7 +3,7 @@ import React, { useEffect, useRef, useState } from "react";
 import { X, Mail, Calendar } from "lucide-react";
 import Image from "next/image";
 
-const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:5000";
+const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? "https://uris.onrender.com";
 
 // ── URIS design tokens ────────────────────────────────────────────────────────
 const C = {
@@ -166,16 +166,14 @@ const AccountModal: React.FC<AccountModalProps> = ({ isOpen, onClose }) => {
           }}>
             <div style={{ display: "flex", alignItems: "center", gap: 9 }}>
               {/* URIS logomark */}
-              <div style={{
-                width: 26, height: 26, borderRadius: 7, flexShrink: 0,
-                background: `linear-gradient(135deg, ${C.primary}, ${C.violet})`,
-                display: "flex", alignItems: "center", justifyContent: "center",
-                boxShadow: `0 0 10px ${C.primaryGlow}`,
-              }}>
-                <svg width="12" height="12" viewBox="0 0 24 24" fill="none">
-                  <path d="M13 10V3L4 14h7v7l9-11h-7z" fill="#fff"/>
-                </svg>
-              </div>
+              <Image
+                src="/uris-logo.svg"
+                alt="URIS logo"
+                width={26}
+                height={26}
+                style={{ width: 26, height: 26, borderRadius: 7, flexShrink: 0 }}
+                priority
+              />
               <span style={{
                 fontSize: 13, fontWeight: 700, color: C.ink900,
                 fontFamily: "IBM Plex Mono, monospace", letterSpacing: "-0.01em",

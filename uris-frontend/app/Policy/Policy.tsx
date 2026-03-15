@@ -176,7 +176,7 @@ const BUILT_IN_POLICIES = [
   },
 ];
 
-const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:5000";
+const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? "https://uris.onrender.com";
 
 // Use a single global policy key that applies to all datasets
 const getSessionKey = () => `uris_policy_global`;

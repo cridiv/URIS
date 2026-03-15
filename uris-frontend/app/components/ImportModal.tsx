@@ -62,7 +62,7 @@ const SourceIcon = ({ name }: { name: string }) => {
 };
 
 // ── API base URL ──────────────────────────────────────────────────────────────
-const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:5000";
+const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? "https://uris.onrender.com";
 
 // ── Local DTO types (mirror backend) ─────────────────────────────────────────
 interface S3ObjectInfo {

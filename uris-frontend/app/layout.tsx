@@ -7,7 +7,7 @@ import { SidebarProvider, useSidebar } from "./components/Sidebar";
 import Navbar from "./components/Navbar";
 import Sidebar from "./components/Sidebar";
 
-const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:5000";
+const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? "https://uris.onrender.com";
 const SESSION_KEY = "uris_auth_verified";
 
 // Module-level cache: survives SPA navigation without needing async I/O.

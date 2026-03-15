@@ -174,7 +174,7 @@ orchestrateAgents() receives datasetId
         ↓
 1. Create run record in database
         ↓
-2. Call agents microservice: POST http://localhost:8000/pipeline/run
+2. Call agents microservice: POST https://uris-agent.onrender.com/pipeline/run
         ↓
 3. Receive pipeline results JSON
         ↓
@@ -339,7 +339,7 @@ Render child components:
 
   **orchestrateAgents(datasetId)**
   - Creates pending run record
-  - Calls agents microservice at `http://localhost:8000/pipeline/run`
+  - Calls agents microservice at `https://uris-agent.onrender.com/pipeline/run`
   - Parses response for metrics (ADFI, privacy risk, evaluation scores)
   - Updates run with results and completion status
   - Returns combined run and pipeline results
@@ -510,14 +510,14 @@ AWS_ACCESS_KEY_ID=your-aws-key
 AWS_SECRET_ACCESS_KEY=your-aws-secret
 AWS_S3_BUCKET=your-bucket-name
 AWS_REGION=us-east-1
-AGENTS_MICROSERVICE_URL=http://localhost:8000
+AGENTS_MICROSERVICE_URL=https://uris-agent.onrender.com
 NODE_ENV=development
 PORT=5000
 ```
 
 **Frontend (.env.local)**
 ```
-NEXT_PUBLIC_API_URL=http://localhost:5000
+NEXT_PUBLIC_API_URL=https://uris.onrender.com
 ```
 
 ### Installation Steps
@@ -541,9 +541,9 @@ python -m uvicorn main:app --reload --port 8000
 ```
 
 ### Access Points
-- **Frontend**: http://localhost:3000
-- **Backend API**: http://localhost:5000
-- **Agents Service**: http://localhost:8000
+- **Frontend**: https://uris-nu.vercel.app
+- **Backend API**: https://uris.onrender.com
+- **Agents Service**: https://uris-agent.onrender.com
 
 ## Key Metrics Explained
 
@@ -577,7 +577,7 @@ python -m uvicorn main:app --reload --port 8000
 - Verify DATABASE_URL connection
 
 **Orchestration Timeout**
-- Ensure agents microservice is running: `curl http://localhost:8000/docs`
+- Ensure agents microservice is running: `curl https://uris-agent.onrender.com/docs`
 - Check agents logs for errors
 - Increase timeout in agents.service.ts if needed
 
@@ -588,7 +588,7 @@ python -m uvicorn main:app --reload --port 8000
 
 **Frontend Can't Connect to Backend**
 - Verify NEXT_PUBLIC_API_URL is correct
-- Check backend is running: `curl http://localhost:5000/health`
+- Check backend is running: `curl https://uris.onrender.com/health`
 - Check CORS configuration in backend
 
 ## Development Workflow
@@ -650,8 +650,8 @@ npx prisma migrate dev --name "add_new_field"
 
 ## Support & Documentation
 
-- Backend API docs: http://localhost:5000/api/docs
-- Agents microservice docs: http://localhost:8000/docs
+- Backend API docs: https://uris.onrender.com/api/docs
+- Agents microservice docs: https://uris-agent.onrender.com/docs
 - Prisma studio: `npx prisma studio`
 - Frontend type definitions: `uris-frontend/app/types/`
 

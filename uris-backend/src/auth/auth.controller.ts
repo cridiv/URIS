@@ -43,7 +43,7 @@ export class AuthController {
   @Get('google/callback')
   @UseGuards(AuthGuard('google'))
   async googleCallback(@Req() req: GoogleAuthRequest, @Res() res: Response) {
-    const frontendBaseUrl = this.config.get<string>('FRONTEND_URL') ?? 'http://localhost:3000';
+    const frontendBaseUrl = this.config.get<string>('FRONTEND_URL') ?? 'https://uris-nu.vercel.app';
     const successRedirect =
       this.config.get<string>('FRONTEND_AUTH_SUCCESS_URL') ??
       `${frontendBaseUrl.replace(/\/$/, '')}/Datasets`;

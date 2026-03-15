@@ -1,6 +1,7 @@
 "use client";
 
 import { createContext, useContext, useState, ReactNode } from "react";
+import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 
@@ -122,12 +123,14 @@ export default function Sidebar() {
 
                 {/* Logo */}
       <div className="flex items-center gap-2 select-none">
-        <div className="w-6 h-6 rounded-md bg-accent flex items-center justify-center flex-shrink-0">
-          <svg width="12" height="12" viewBox="0 0 14 14" fill="none">
-            <path d="M2 7L5.5 3.5L9 7L5.5 10.5L2 7Z" fill="white" opacity="0.55" />
-            <path d="M6 7L9.5 3.5L13 7L9.5 10.5L6 7Z" fill="white" />
-          </svg>
-        </div>
+        <Image
+          src="/uris-logo.svg"
+          alt="URIS logo"
+          width={24}
+          height={24}
+          className="h-6 w-6 rounded-md flex-shrink-0"
+          priority
+        />
         <span className="text-[13.5px] font-semibold tracking-tight text-ink-900">
           URIS
         </span>

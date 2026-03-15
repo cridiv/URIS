@@ -1,42 +1,37 @@
 "use client";
 
+import Image from "next/image";
 import React, { useEffect, useState } from "react";
 import { motion } from "framer-motion";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { Loader2 } from "lucide-react";
 
-const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:5000";
+const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? "https://uris.onrender.com";
 const SESSION_KEY = "uris_auth_verified";
 
 const SignIn = () => {
   const searchParams = useSearchParams();
+  const authError = searchParams.get("error");
   const [loading, setLoading] = useState<"google" | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const error = authError === "missing_token"
+    ? "No token was returned from Google login. Please try again."
+    : authError === "invalid_token"
+      ? "Login token validation failed. Please sign in again."
+      : null;
 
   useEffect(() => {
     // Clear any stale auth cache when the user arrives at the sign-in page
     // (covers logout, session expiry, and explicit sign-out flows).
     try { sessionStorage.removeItem(SESSION_KEY); } catch {}
 
-    const authError = searchParams.get("error");
     if (authError) {
       console.warn("[signin] auth error query param", { authError });
     }
-
-    if (authError === "missing_token") {
-      setError("No token was returned from Google login. Please try again.");
-      return;
-    }
-
-    if (authError === "invalid_token") {
-      setError("Login token validation failed. Please sign in again.");
-    }
-  }, [searchParams]);
+  }, [authError]);
 
   const handleGoogleLogin = () => {
     setLoading("google");
-    setError(null);
     console.debug("[signin] redirecting to backend google auth", { url: `${API_BASE}/auth/google` });
     window.location.href = `${API_BASE}/auth/google`;
   };
@@ -64,8 +59,15 @@ const SignIn = () => {
 
           {/* Logo */}
           <div className="mb-6 border-b border-surface-100 pb-4 text-center">
-            <div className="text-3xl font-bold tracking-tight text-ink-900">
-              Welcome to <span className="text-[#676AF1]">URIS</span>
+            <div className="flex items-center justify-center gap-3">
+              <Image
+                src="/uris-logo.svg"
+                alt="URIS logo"
+                width={48}
+                height={48}
+                className="h-12 w-12 rounded-xl"
+                priority
+              />
             </div>
           </div>
 

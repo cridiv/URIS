@@ -23,7 +23,7 @@ export class ProfilerService {
   private readonly logger = new Logger(ProfilerService.name);
 
   constructor(private readonly config: ConfigService) {
-    this.agentsUrl = config.get<string>('app.agentsUrl') ?? 'http://localhost:8000';
+    this.agentsUrl = config.get<string>('app.agentsUrl') ?? 'https://uris-agent.onrender.com';
   }
 
   async profile(

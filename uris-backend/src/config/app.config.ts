@@ -3,7 +3,7 @@ import { registerAs } from '@nestjs/config';
 export default registerAs('app', () => ({
   port: parseInt(process.env.PORT ?? '5000', 10),
   nodeEnv: process.env.NODE_ENV ?? 'development',
-  corsOrigins: (process.env.CORS_ORIGINS ?? 'http://localhost:3000')
+  corsOrigins: (process.env.CORS_ORIGINS ?? 'https://uris-nu.vercel.app')
     .split(',')
     .map((o) => o.trim()),
   
@@ -16,5 +16,5 @@ export default registerAs('app', () => ({
   },
 
   // Python Agents Service for profiling
-  agentsUrl: process.env.AGENTS_URL ?? 'http://localhost:8000',
+  agentsUrl: process.env.AGENTS_URL ?? 'https://uris-agent.onrender.com',
 }));

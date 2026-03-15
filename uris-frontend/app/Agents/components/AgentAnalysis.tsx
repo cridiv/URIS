@@ -539,7 +539,7 @@ function SynthesisResult({ payload, datasetId, runId, onAnalysisSaved, existingS
     setIsFallbackDownload(false);
     
     try {
-      const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:5000';
+      const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? 'https://uris.onrender.com';
       const response = existingSyntheticDataS3Key
         ? await fetch(`${API_BASE}/agents/${datasetId}/runs/${runId}/download-synthetic`, {
             credentials: 'include',
@@ -1239,7 +1239,7 @@ export default function PipelineLog({ dataset, currentRun, onRunCreated }: Agent
     }
 
     try {
-      const socketUrl = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:5000";
+      const socketUrl = process.env.NEXT_PUBLIC_API_URL ?? "https://uris.onrender.com";
 
       const socket = io(`${socketUrl}/agents`, {
         reconnection: true,
@@ -1339,7 +1339,7 @@ export default function PipelineLog({ dataset, currentRun, onRunCreated }: Agent
 
     // Trigger orchestration on backend with event headers
     try {
-      const backendUrl = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:5000";
+      const backendUrl = process.env.NEXT_PUBLIC_API_URL ?? "https://uris.onrender.com";
       const res = await fetch(`${backendUrl}/agents/${dataset.id}/orchestrate`, {
         method: "POST",
         credentials: "include",

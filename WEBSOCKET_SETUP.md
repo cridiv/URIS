@@ -38,7 +38,7 @@ npm install @nestjs/websockets socket.io
 #### Configuration
 Add to `.env` (optional):
 ```
-BACKEND_URL=http://localhost:5000
+BACKEND_URL=https://uris.onrender.com
 ```
 
 The backend will automatically construct callback URLs for the Python service.
@@ -145,7 +145,7 @@ During execution, agents emit events:
 from app.utils.event_emitter import AgentEventEmitter
 
 emitter = AgentEventEmitter(
-    backend_url="http://localhost:5000",
+    backend_url="https://uris.onrender.com",
     dataset_id="ds_123",
     run_id="run_456"
 )
@@ -220,7 +220,7 @@ npm run dev
 
 ```bash
 # Simulate Python sending event to backend
-curl -X POST http://localhost:5000/agents/ds_123/runs/run_456/events \
+curl -X POST https://uris.onrender.com/agents/ds_123/runs/run_456/events \
   -H "Content-Type: application/json" \
   -d '{
     "type": "agent_data",
@@ -235,14 +235,14 @@ curl -X POST http://localhost:5000/agents/ds_123/runs/run_456/events \
 
 ### Backend (.env)
 ```
-AGENTS_URL=http://localhost:8000       # Python service URL
-BACKEND_URL=http://localhost:5000      # For callback URLs
-CORS_ORIGINS=http://localhost:3000     # Frontend URL
+AGENTS_URL=https://uris-agent.onrender.com       # Python service URL
+BACKEND_URL=https://uris.onrender.com      # For callback URLs
+CORS_ORIGINS=https://uris-nu.vercel.app     # Frontend URL
 ```
 
 ### Frontend (.env.local)
 ```
-NEXT_PUBLIC_API_URL=http://localhost:5000
+NEXT_PUBLIC_API_URL=https://uris.onrender.com
 ```
 
 ### Python (no special env needed)

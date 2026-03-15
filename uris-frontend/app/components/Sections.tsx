@@ -1,4 +1,5 @@
 "use client";
+import Image from "next/image";
 import { useState, useEffect, useRef, type CSSProperties, type MouseEvent, type ReactNode, type RefObject } from "react";
 
 // ── Design tokens (identical to HeroPage) ────────────────────────────────────
@@ -776,14 +777,13 @@ function Footer() {
           {/* Brand */}
           <div style={{ maxWidth: 280 }}>
             <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 16 }}>
-              <div style={{
-                width: 30, height: 30, borderRadius: 8,
-                background: `linear-gradient(135deg, ${C.primary}, ${C.violet})`,
-                display: "flex", alignItems: "center", justifyContent: "center",
-                boxShadow: `0 0 14px ${C.primaryGlow}`,
-              }}>
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none"><path d="M13 10V3L4 14h7v7l9-11h-7z" fill="#fff"/></svg>
-              </div>
+              <Image
+                src="/uris-logo.svg"
+                alt="URIS logo"
+                width={30}
+                height={30}
+                style={{ width: 30, height: 30, borderRadius: 8, flexShrink: 0 }}
+              />
               <span style={{ fontSize: 14, fontWeight: 800, color: C.ink900, letterSpacing: "-0.03em", fontFamily: "IBM Plex Mono, monospace" }}>URIS</span>
             </div>
             <p style={{ fontSize: 13.5, color: C.ink400, lineHeight: 1.7, margin: "0 0 20px" }}>

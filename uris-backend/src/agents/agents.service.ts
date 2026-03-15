@@ -27,7 +27,7 @@ export class AgentsService {
     private readonly storage: S3StorageService,
     private readonly policyService: PolicyService,
   ) {
-    this.agentsUrl = config.get<string>('app.agentsUrl') ?? 'http://localhost:8000';
+    this.agentsUrl = config.get<string>('app.agentsUrl') ?? 'https://uris-agent.onrender.com';
     this.s3Client = new S3Client({
       region: config.get<string>('app.s3.region') ?? 'us-east-1',
       tls: true,
@@ -162,7 +162,7 @@ export class AgentsService {
       }
 
       // Get base URL for callback (use override from header if provided)
-      const backendUrl = overrideBackendUrl ?? this.config.get<string>('app.backendUrl') ?? 'http://localhost:5000';
+      const backendUrl = overrideBackendUrl ?? this.config.get<string>('app.backendUrl') ?? 'https://uris.onrender.com';
 
       console.log(`[AgentsService] Sending file to Python backend: ${this.agentsUrl}/pipeline/run`);
       console.log(`[AgentsService] Event callback URL: ${backendUrl}`);

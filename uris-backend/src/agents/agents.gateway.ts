@@ -33,7 +33,7 @@ interface AgentSession {
 @WebSocketGateway({
   namespace: 'agents',
   cors: {
-    origin: process.env.CORS_ORIGINS?.split(',') ?? 'http://localhost:3000',
+    origin: process.env.CORS_ORIGINS?.split(',') ?? 'https://uris-nu.vercel.app',
     credentials: true,
   },
 })
