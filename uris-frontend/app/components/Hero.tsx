@@ -374,12 +374,17 @@ function HeroSection() {
             </a>
 
             {/* Tertiary — ghost link */}
-            <button style={{
+            <a
+              href="https://builder.aws.com/content/3AzeSJ89MRj0oor9vaeaT6RYWk0/uris-how-i-built-an-autonomous-data-intelligence-engine-on-amazon-nova"
+              target="_blank"
+              rel="noopener noreferrer"
+              style={{
               height: 46, padding: "0 18px", borderRadius: 11,
               border: "none", background: "transparent",
               color: C.ink400, fontSize: 14.5, fontWeight: 600,
               fontFamily: "IBM Plex Sans, sans-serif", cursor: "pointer",
-              display: "flex", alignItems: "center", gap: 6, transition: "all 0.15s",
+              display: "inline-flex", alignItems: "center", gap: 6, transition: "all 0.15s",
+              textDecoration: "none",
             }}
               onMouseEnter={e => e.currentTarget.style.color = C.primary}
               onMouseLeave={e => e.currentTarget.style.color = C.ink400}>
@@ -387,7 +392,7 @@ function HeroSection() {
               <svg width="12" height="12" viewBox="0 0 24 24" fill="none">
                 <path d="M7 17L17 7M17 7H7M17 7v10" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
               </svg>
-            </button>
+            </a>
           </div>
 
           <StatsStrip />
