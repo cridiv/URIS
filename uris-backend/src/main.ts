@@ -15,9 +15,10 @@ async function bootstrap() {
   );
 
   // CORS — restrict to configured origins only
-  const allowedOrigins = (process.env.CORS_ORIGINS ?? 'https://uris-nu.vercel.app/')
+  const allowedOrigins = (process.env.CORS_ORIGINS ?? 'https://uris-nu.vercel.app')
     .split(',')
-    .map((o) => o.trim());
+    .map((origin) => origin.trim().replace(/\/+$/, ''))
+    .filter((origin) => origin.length > 0);
 
   app.enableCors({
     origin: allowedOrigins,
@@ -37,4 +38,4 @@ async function bootstrap() {
   console.log(`🚀 URIS backend running on http://localhost:${port}`);
 }
 
-bootstrap();
+void bootstrap();
