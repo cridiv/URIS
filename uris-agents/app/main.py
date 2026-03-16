@@ -3,13 +3,14 @@ from .routes.pipeline import router as pipeline_router
 from .routes.analysis import router as analysis_router
 
 app = FastAPI(title="URIS API")
+
 app.include_router(pipeline_router)
 app.include_router(analysis_router)
 
-
-@app.get("/health")
+@app.get("/")
 def health_check():
-	return {
-		"status": "ok",
-		"service": "uris-agents",
-	}
+    return {
+        "status": "ok",
+        "service": "uris-agents",
+        "timestamp": __import__('datetime').datetime.utcnow().isoformat() + "Z"
+    }
