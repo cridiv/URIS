@@ -540,11 +540,6 @@ pip install -r requirements.txt
 python -m uvicorn main:app --reload --port 8000
 ```
 
-### Access Points
-- **Frontend**: https://uris-nu.vercel.app
-- **Backend API**: https://uris.onrender.com
-- **Agents Service**: https://uris-agent.onrender.com
-
 ## Key Metrics Explained
 
 ### ADFI Score (Assay Data Fidelity Index)
@@ -648,15 +643,8 @@ npx prisma migrate dev --name "add_new_field"
 - GetRunResult: <50ms
 - CreateRun: <30ms
 
-## Support & Documentation
-
-- Backend API docs: https://uris.onrender.com/api/docs
-- Agents microservice docs: https://uris-agent.onrender.com/docs
-- Prisma studio: `npx prisma studio`
-- Frontend type definitions: `uris-frontend/app/types/`
-
 ---
 
-**Last Updated**: March 3, 2026  
+**Last Updated**: March 16, 2026  
 **System Version**: 1.0.0  
 **Status**: Production Ready
