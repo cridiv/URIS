@@ -52,8 +52,19 @@ export class ProfilerService {
     if (!res.ok) {
       const text = await res.text().catch(() => '');
       this.logger.error(`Profiler ${res.status}: ${text}`);
+
+      // 502/503 almost always means the agents service is waking up on Render.
+      // Never forward raw HTML (Render's gateway pages) to the client.
+      if (res.status === 502 || res.status === 503) {
+        throw new InternalServerErrorException(
+          'The analysis service is temporarily unavailable — it may be starting up. Please wait a moment and retry.',
+        );
+      }
+
+      const isHtml = text.trimStart().startsWith('<');
+      const detail = isHtml ? '' : text.slice(0, 300);
       throw new InternalServerErrorException(
-        `Profiler returned ${res.status}: ${text || 'unknown error'}`,
+        `Profiler returned ${res.status}${detail ? ': ' + detail : ''}`,
       );
     }
 

@@ -5,3 +5,11 @@ from .routes.analysis import router as analysis_router
 app = FastAPI(title="URIS API")
 app.include_router(pipeline_router)
 app.include_router(analysis_router)
+
+
+@app.get("/health")
+def health_check():
+	return {
+		"status": "ok",
+		"service": "uris-agents",
+	}

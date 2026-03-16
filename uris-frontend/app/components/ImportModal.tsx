@@ -453,7 +453,10 @@ export default function ImportModal({ onClose }: { onClose: () => void }) {
 
       if (!response.ok) {
         const error = await response.json().catch(() => ({}));
-        throw new Error(error.message ?? `Upload failed (${response.status})`);
+        const raw = error.message ?? `Upload failed (${response.status})`;
+        // Guard against raw HTML leaking through (e.g. Render gateway error pages)
+        const isHtml = typeof raw === 'string' && raw.trimStart().startsWith('<');
+        throw new Error(isHtml ? `Upload failed (${response.status}) — the server may be starting up, please retry.` : raw);
       }
 
       const result = await response.json();

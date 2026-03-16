@@ -6,8 +6,10 @@ import { DatasetModule } from './dataset/dataset.module';
 import { AgentsModule } from './agents/agents.module';
 import { PolicyModule } from './policy/policy.module';
 import { AuthModule } from './auth/auth.module';
+import { HealthController } from './health.controller';
 
 @Module({
+  controllers: [HealthController],
   imports: [
     ConfigModule.forRoot({
       load: [appConfig],
