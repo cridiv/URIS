@@ -1,19 +1,35 @@
-# URIS: Universal Relational Intelligence System
+# URIS: Unified Reasoning Intelligence System
 
-A comprehensive multi-agent orchestration platform for dataset analysis, data quality assessment, compliance validation, and intelligent data synthesis.
+> **Autonomous Data Intelligence, Powered by Amazon Nova 2 Lite**
 
-## System Overview
+URIS is a multi-agent orchestration platform that autonomously diagnoses, fixes, and validates datasets for AI readiness. Five specialized agents work in sequence — and sometimes in opposition — to deliver clean, compliant, AI-ready data with a complete audit trail.
 
-URIS is a three-tier architecture system designed to analyze datasets through specialized agent pipelines, providing comprehensive insights into data structure, quality metrics, privacy compliance, and synthetic data generation capabilities.
+Unlike orchestration pipelines where agents simply execute steps in order, URIS agents evaluate each other's outputs, reject failing strategies, and force the Planner to revise its approach. That distinction — between executing and reasoning — is the core of what URIS is.
 
-### Architecture
+🔗 **Live Demo**: [uris-nu.vercel.app](https://uris-nu.vercel.app)  
+📦 **Backend API**: [uris.onrender.com](https://uris.onrender.com)  
+🤖 **Agents Service**: [uris-agent.onrender.com](https://uris-agent.onrender.com)
+
+---
+
+## What Makes URIS Different
+
+Traditional data pipelines hand you output and move on. They don't push back. They don't catch their own mistakes.
+
+URIS agents do.
+
+When the Synthesis Agent generates data that fails privacy checks, the Validation Agent rejects it — not because it was programmed to handle that specific failure, but because it evaluated the output against constraints and made a judgment. The Planner then revises the strategy and tries a structurally different approach. This rejection-revision cycle is what makes URIS autonomous rather than automated.
+
+---
+
+## Architecture
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
 │                    Frontend (Next.js 14)                        │
 │  - Dataset Upload & Management (Datasets.tsx)                  │
 │  - Orchestration Dashboard (Agent.tsx)                          │
-│  - Real-time Results Visualization (AgentResult.tsx)           │
+│  - Real-time Pipeline Visualization (AgentResult.tsx)          │
 │  - Pipeline Analysis Viewer (AgentAnalysis.tsx)                │
 │  - Dataset Metadata Browser (DatasetOverview.tsx)              │
 └─────────────────────────────────────────────────────────────────┘
@@ -31,620 +47,345 @@ URIS is a three-tier architecture system designed to analyze datasets through sp
                     Agents Microservice
                               ↓
 ┌─────────────────────────────────────────────────────────────────┐
-│     Agents Pipeline (Python FastAPI - External Service)         │
-│  - Planner Agent: Dataset structure analysis                   │
-│  - Evaluator Agent: Data quality metrics                       │
-│  - Compliance Agent: Privacy & compliance validation           │
-│  - Synthesizer Agent: Synthetic data generation                │
-│  - Validator Agent: Results validation                         │
+│          Agents Pipeline (Python FastAPI)                       │
+│                                                                 │
+│  Planner → Evaluator → Compliance → Synthesizer → Validator    │
+│      ↑___________________ Revision Loop ___________________↑   │
+│                                                                 │
+│  Powered by Amazon Nova 2 Lite via AWS Bedrock                 │
 └─────────────────────────────────────────────────────────────────┘
 ```
 
-## Features
+---
 
-### Dataset Management
-- **Upload & Storage**: CSV file uploads with AWS S3 backend storage
-- **Data Profiling**: Automatic column analysis (type, cardinality, missing values)
-- **Metadata Tracking**: Row counts, file sizes, column specifications
-- **Version History**: Track multiple uploads and run results
+## The Agent Pipeline
 
-### Orchestration & Analysis
-- **Multi-Agent Pipeline**: Coordinated analysis through specialized agents
-- **Intelligent Routing**: Data flows through planner → evaluator → compliance → synthesizer → validator
-- **Real-time Monitoring**: Track orchestration status and progress
-- **Result Storage**: Comprehensive pipeline results stored in PostgreSQL
+Each agent has a single, well-defined job. The intelligence emerges from how they interact.
 
-### Quality & Compliance Metrics
-- **ADFI Score** (Assay Data Fidelity Index): Overall data quality metric
-- **Completeness**: Percentage of non-null values per column
-- **Uniqueness**: Cardinality analysis and duplication detection
-- **Balance**: Distribution uniformity across categorical values
-- **Privacy Risk**: Sensitivity scoring for personally identifiable information
-- **Compliance Validation**: Standards adherence checking
+### Planner Agent
+Receives the dataset and decomposes the task — identifying the target AI use case, defining constraints (balance targets, privacy thresholds, variance limits), and routing work to downstream agents. Critically, the Planner re-runs when the Validation Agent rejects a strategy, generating a structurally different approach rather than retrying the same one.
 
-### Data Visualization & Analysis
-- **Results Dashboard**: ADFI scores, quality metrics, compliance status
-- **Pipeline Viewer**: Interactive JSON exploration of orchestration output
-- **Historical Analysis**: Compare results across multiple runs
-- **Metric Trends**: Track quality improvements/degradation over time
+### Evaluation Agent
+Calculates the **Autonomous Data Fitness Index (ADFI)** — a single score measuring how AI-ready a dataset is across five dimensions: completeness, uniqueness, balance, distribution quality, and consistency. Also identifies critical gaps with severity ratings.
+
+```
+ADFI = w₁(Completeness) + w₂(Uniqueness) + w₃(Balance) − w₄(PrivacyRisk) − w₅(CorrelationDrift)
+```
+
+| Score | Interpretation |
+|-------|---------------|
+| > 0.9 | AI-ready |
+| 0.7 – 0.9 | Usable, improvements recommended |
+| < 0.7 | Significant work required |
+
+### Compliance Agent
+Runs **before any data is modified**. Scans every column for PII patterns, assesses GDPR and CCPA exposure, calculates re-identification risk, and enforces user-defined policy rules. Can block the entire pipeline if a proposed transformation increases privacy risk.
+
+Privacy risk scoring combines PII detection, identifier cardinality analysis, and sensitivity flagging:
+
+| Score | Risk Level |
+|-------|-----------|
+| < 0.3 | Low |
+| 0.3 – 0.7 | Medium |
+| > 0.7 | High |
+
+### Synthesis Agent
+Generates statistically similar synthetic samples to fix class imbalances and fill sparse columns. Preserves column relationships and distributions. Selects synthesis strategy based on dataset characteristics — GaussianCopula for numeric-heavy datasets, CTGAN for categorical-heavy ones. Proposes multiple strategies when the first fails.
+
+### Validation Agent
+Compares pre and post-augmentation metrics. Measures distribution similarity, exact match rates, and correlation drift. **Can reject synthesis output entirely** if quality degrades or constraints are violated. Triggers strategy revision with structured reasoning explaining what failed and why.
+
+---
+
+## The Compliance Policy Engine
+
+Users define compliance rules through a visual policy rule builder. Rules compile into executable policy directives:
+
+```
+POLICY gdpr_standard {
+  DROP direct_identifiers IF pii_type IS direct_identifier;
+  GENERALISE pii_columns IF pii_type IS quasi_identifier;
+  MASK financial_columns IF pii_type IS financial;
+}
+```
+
+Available actions: `BLOCK` · `MASK` · `FLAG` · `GENERALISE` · `DROP`
+
+Available conditions: `pii_type IS direct_identifier` · `pii_type IS quasi_identifier` · `pii_type IS financial` · `pii_type IS health` · `reid_risk > 0.3`
+
+Policies attach to evaluation runs and are enforced by the Compliance Agent before synthesis begins.
+
+---
+
+## Key Engineering Decisions
+
+**Why structured JSON agent communication.**
+The naive approach passes full agent output directly to the next agent. On a medium dataset, the Evaluation Agent alone produces enough output to bloat context significantly by the time the Validator runs — causing the model to contradict its earlier reasoning. URIS extracts a compact typed handoff object at each step, containing only the fields the next agent actually needs. This eliminated an entire class of hallucinations caused by context overflow.
+
+**Why GaussianCopula first, CTGAN on failure.**
+GaussianCopula is faster and generalizes well on numeric-heavy datasets. For categorical-heavy datasets like Titanic, it memorizes rather than generalizes — producing exact row matches that violate privacy thresholds. The Validator catches this and the Planner revises to CTGAN, which handles categorical distributions better at the cost of longer synthesis time. The architecture attempts the cheaper strategy first and escalates on failure.
+
+**Why the correlation baseline recomputes after imputation.**
+Computing correlation drift against the original schema after imputation and column drops produces invalid comparisons — the matrices have different shapes. URIS recomputes the baseline correlation matrix after every transformation step, ensuring drift is measured against what the data actually looked like at that point in the pipeline, not at upload.
+
+**Why a custom policy DSL over hardcoded rules.**
+Hardcoded compliance rules make the system brittle — every new regulation or internal policy requires a code change. The policy rule builder compiles user-defined directives into executable policy objects that the Compliance Agent enforces. The same engine that enforces GDPR today can enforce a custom internal data governance policy tomorrow without touching agent code.
+
+**Why Amazon Nova 2 Lite for all agent reasoning.**
+Constraint-aware strategy revision requires a model that can hold multiple competing objectives simultaneously, evaluate an output against those constraints, and generate a structurally different alternative when the first approach fails. That is not prompt chaining. That is reasoning. Nova 2 Lite's extended thinking capabilities are what make the rejection-revision cycle possible — not just the happy path.
+
+---
 
 ## Technology Stack
 
 ### Frontend
 - **Framework**: Next.js 14 (React + TypeScript)
-- **Styling**: TailwindCSS with custom component system
-- **State Management**: React Hooks (useState, useEffect, useContext)
-- **API Client**: Fetch API with error handling
-- **Build**: Next.js built-in build system
+- **Styling**: TailwindCSS
+- **State Management**: React Hooks
+- **Deployment**: Vercel
 
 ### Backend
 - **Framework**: NestJS (TypeScript)
 - **Database**: PostgreSQL with PrismaORM
-- **Storage**: AWS S3 (configured via environment variables)
-- **HTTP Client**: Axios for agents microservice calls
-- **Build**: NestJS CLI + TypeScript compiler
+- **Storage**: AWS S3
+- **Deployment**: Render
 
-### Data Processing
-- **Agents Microservice**: Python FastAPI (external service at localhost:8000)
-- **Data Format**: CSV input, JSON pipeline results
-- **Storage Format**: Prisma JSONB columns for complex result objects
+### Agents Microservice
+- **Framework**: Python FastAPI
+- **LLM**: Amazon Nova 2 Lite via AWS Bedrock (`bedrock.py`)
+- **Synthesis**: SDV (Synthetic Data Vault) — GaussianCopula + CTGAN
+- **Privacy**: Custom PII detection (`privacy_checker.py`)
+- **Correlation**: Feature drift analysis (`correlation_checker.py`)
+- **Deployment**: Render
+
+---
 
 ## Project Structure
 
 ```
 uris-agents/                    # Python FastAPI agents microservice
 ├── agents/
-│   ├── compliance/            # Privacy & compliance validation
-│   ├── evaluation/            # Data quality metrics
-│   ├── planner/               # Dataset structure analysis
+│   ├── compliance/            # PII detection & policy enforcement
+│   ├── evaluation/            # ADFI scoring & quality metrics
+│   ├── planner/               # Task decomposition & routing
 │   ├── synthesis/             # Synthetic data generation
-│   └── validation/            # Results validation
+│   └── validation/            # Output approval & rejection
 ├── utils/
-│   ├── bedrock.py            # AWS Bedrock integration
-│   ├── correlation_checker.py # Feature correlation analysis
-│   ├── privacy_checker.py    # PII detection
-│   ├── profiler.py           # Column profiling
-│   └── synthesizer.py        # Synthetic data generation
+│   ├── bedrock.py            # AWS Bedrock / Nova 2 Lite integration
+│   ├── correlation_checker.py # Feature correlation drift analysis
+│   ├── privacy_checker.py    # PII detection & risk scoring
+│   ├── profiler.py           # Column profiling & cardinality
+│   └── synthesizer.py        # SDV synthesis strategies
 └── main.py                    # FastAPI application entry
 
 uris-backend/                   # NestJS REST API
 ├── src/
 │   ├── agents/               # Agent orchestration service
-│   │   ├── agents.controller.ts   # API endpoints
-│   │   ├── agents.service.ts      # Business logic
-│   │   └── agents.module.ts       # Module registration
+│   │   ├── agents.controller.ts
+│   │   ├── agents.service.ts
+│   │   └── agents.module.ts
 │   ├── dataset/              # Dataset management
-│   │   ├── dataset.controller.ts
-│   │   ├── dataset.service.ts
-│   │   └── dataset.module.ts
-│   ├── aws/                  # AWS S3 integration
-│   │   ├── s3.service.ts
-│   │   └── s3.storage.ts
-│   ├── prisma/              # Database service
-│   ├── app.module.ts        # Root module
-│   └── main.ts              # Entry point
-├── prisma/
-│   └── schema.prisma        # Database schema
-└── package.json
+│   ├── aws/                  # S3 integration
+│   └── prisma/               # Database service
+└── prisma/schema.prisma       # Database schema
 
 uris-frontend/                  # Next.js React application
 ├── app/
-│   ├── Agents/              # Orchestration dashboard
-│   │   ├── Agent.tsx        # Main orchestration page
+│   ├── Agents/               # Orchestration dashboard
+│   │   ├── Agent.tsx
 │   │   └── components/
-│   │       ├── AgentResult.tsx      # Results panel
-│   │       ├── AgentAnalysis.tsx    # Pipeline viewer
-│   │       ├── DatasetOverview.tsx  # Metadata sidebar
-│   │       └── DatasetStatusBar.tsx # Header
-│   ├── Datasets/            # Dataset management
-│   │   ├── Datasets.tsx     # Upload & analysis start
-│   │   └── components/
-│   ├── layout.tsx           # Root layout
-│   └── page.tsx             # Home page
+│   │       ├── AgentResult.tsx       # Metrics & scores panel
+│   │       ├── AgentAnalysis.tsx     # Pipeline JSON viewer
+│   │       ├── DatasetOverview.tsx   # Metadata sidebar
+│   │       └── DatasetStatusBar.tsx  # Header bar
+│   └── Datasets/             # Dataset management & upload
 └── package.json
 ```
 
-## Data Flow: Complete Orchestration Journey
+---
 
-### 1. Dataset Upload (Datasets.tsx)
-```
-User selects CSV file → Upload to backend → S3 storage → Database entry
-                                    ↓
-                        Return dataset metadata
-                                    ↓
-                        Display in datasets list
-```
+## Data Flow
 
-### 2. Orchestration Initiation (Datasets.tsx → Agent.tsx)
-```
-User clicks "Analyze" button
-        ↓
-POST /agents/{datasetId}/orchestrate
-        ↓
-Backend creates pending run record
-        ↓
-Extract run.id from response
-        ↓
-Navigate to /Agents?datasetId=...&runId=...
-```
+### Upload → Analyze → Download
 
-### 3. Backend Orchestration (agents.service.ts)
 ```
-orchestrateAgents() receives datasetId
+1. User uploads CSV
         ↓
-1. Create run record in database
+   Backend stores to S3 + creates database entry
         ↓
-2. Call agents microservice: POST https://uris-agent.onrender.com/pipeline/run
+2. User triggers analysis
         ↓
-3. Receive pipeline results JSON
+   POST /agents/{datasetId}/orchestrate
         ↓
-4. Parse metrics:
-   - adfiScore (ADFI Index)
-   - privacy_risk_score
-   - evaluation metrics (completeness, uniqueness, balance)
-   - compliance results
-   - synthetic data specifications
+   Agents microservice runs pipeline:
+   Planner → Evaluator → Compliance → Synthesizer → Validator
         ↓
-5. Update run record with results & status
+   If Validator rejects → Planner revises → Synthesizer reruns
         ↓
-6. Return { run: {...}, pipeline: {...} }
+3. Results stored in PostgreSQL (JSONB)
+        ↓
+   Frontend renders: ADFI score, metrics, compliance status,
+   agent reasoning traces, audit log
+        ↓
+4. User downloads AI-ready synthetic dataset
 ```
 
-### 4. Frontend Results Display (Agent.tsx)
-```
-Component loads with ?datasetId=...&runId=...
-        ↓
-Fetch dataset: GET /agents/{datasetId}
-        ↓
-Receives: { dataset: {...}, runs: [...] }
-        ↓
-Load selected run with metrics
-        ↓
-Render child components:
+### Agent Communication Protocol
 
-┌────────────────────────────────────────────────────┐
-│          DatasetStatusBar (Header)                 │
-│  Dataset: titanic | Run: run-a1f2c3d4 | Status: ✓ │
-│  ADFI: 87.3% | Privacy Risk: Low                   │
-└────────────────────────────────────────────────────┘
-│                                                    │
-│ ┌──────────────────┐  ┌────────────────────────┐  │
-│ │ DatasetOverview  │  │   AgentResult Panel    │  │
-│ │ (Left Sidebar)   │  │   (Right Results)      │  │
-│ │                  │  │                        │  │
-│ │ Columns:         │  │ ✓ ADFI: 87.3%         │  │
-│ │ - PassengerId    │  │ • Completeness: 94%   │  │
-│ │ - Name (string)  │  │ • Uniqueness: 92%     │  │
-│ │ - Age (numeric)  │  │ • Balance: 85%        │  │
-│ │ - Fare (numeric) │  │ • Privacy Risk: Low   │  │
-│ │                  │  │ • Records: 891        │  │
-│ │ Run History:     │  │ • Null Count: 54      │  │
-│ │ [run-a1f2c3d4]✓  │  │                        │  │
-│ │  run-9b8d7c6e ✓  │  │                        │  │
-│ └──────────────────┘  └────────────────────────┘  │
-│                                                    │
-│ ┌──────────────────────────────────────────────┐  │
-│ │      AgentAnalysis (Center - Pipeline JSON)  │  │
-│ │ {                                             │  │
-│ │   "adfiScore": 87.3,                          │  │
-│ │   "evaluation": {                             │  │
-│ │     "completeness": 0.94,                     │  │
-│ │     "uniqueness": 0.92,                       │  │
-│ │     "balance": 0.85                           │  │
-│ │   },                                          │  │
-│ │   "compliance": {...}                         │  │
-│ │ }                                             │  │
-│ └──────────────────────────────────────────────┘  │
-└────────────────────────────────────────────────────┘
-```
+Agents pass compact typed handoff objects — not full outputs:
 
-## Component Documentation
-
-### Frontend Components
-
-#### **Agent.tsx** (Main Orchestration Page)
-- **Purpose**: Orchestration dashboard hub
-- **Location**: [app/Agents/Agent.tsx](uris-frontend/app/Agents/Agent.tsx)
-- **Key Features**:
-  - Fetches dataset metadata from `/agents/{datasetId}`
-  - Fetches agent run history from `/agents/{datasetId}`
-  - Manages selected run state
-  - Coordinates child component updates
-- **Props Passed**: `dataset`, `currentRun`, `runs`, `loading`
-- **Data Dependencies**: Uses URL params `datasetId` and `runId`
-
-#### **AgentResult.tsx** (Results Panel)
-- **Purpose**: Display numerical analysis results and metrics
-- **Location**: [app/Agents/components/AgentResult.tsx](uris-frontend/app/Agents/components/AgentResult.tsx)
-- **Key Features**:
-  - Renders ADFI score with percentage bar
-  - Shows quality metrics (completeness, uniqueness, balance)
-  - Displays privacy risk level
-  - Shows data statistics (row count, null count, file size)
-  - Calculates ADFI delta vs. previous runs
-- **Metrics Extracted From**:
-  - `pipeline.evaluation` - quality metrics
-  - `pipeline.compliance` - privacy & compliance scores
-  - `run` record - timestamps and status
-
-#### **AgentAnalysis.tsx** (Pipeline Viewer)
-- **Purpose**: Display raw pipeline JSON output
-- **Location**: [app/Agents/components/AgentAnalysis.tsx](uris-frontend/app/Agents/components/AgentAnalysis.tsx)
-- **Key Features**:
-  - Pretty-prints JSON with 2-space indentation
-  - Allows inspection of complete orchestration output
-  - Handles both `run.result` and nested `run.result.pipeline_result`
-- **Data Structure**: Displays complete agents microservice response
-
-#### **DatasetOverview.tsx** (Metadata Sidebar)
-- **Purpose**: Show dataset info and run history for comparison
-- **Location**: [app/Agents/components/DatasetOverview.tsx](uris-frontend/app/Agents/components/DatasetOverview.tsx)
-- **Key Features**:
-  - Displays profiled columns with type & stats
-  - Lists run history (last 10 runs)
-  - Shows ADFI score for each run
-  - Allows selecting different runs for comparison
-  - Calculates ADFI delta vs. most recent run
-
-#### **DatasetStatusBar.tsx** (Header)
-- **Purpose**: Top bar showing dataset and run status
-- **Location**: [app/Agents/components/DatasetStatusBar.tsx](uris-frontend/app/Agents/components/DatasetStatusBar.tsx)
-- **Key Features**:
-  - Displays dataset name (from URL or API)
-  - Shows run ID prefix
-  - Indicates orchestration status
-  - Displays key metrics (ADFI, compliance)
-  - Shows last updated timestamp
-
-#### **Datasets.tsx** (Dataset Browser & Upload)
-- **Purpose**: Dataset management and orchestration trigger
-- **Location**: [app/Datasets/Datasets.tsx](uris-frontend/app/Datasets/Datasets.tsx)
-- **Key Features**:
-  - Lists all uploaded datasets
-  - CSV file upload with S3 backend
-  - "Analyze" button triggers orchestration
-  - Navigates to /Agents on successful orchestration
-- **Orchestration Flow**:
-  ```typescript
-  handleAnalyze(datasetId) {
-    POST /agents/{datasetId}/orchestrate
-    Extract run.id from response
-    Navigate to /Agents?datasetId={id}&runId={runId}
-  }
-  ```
-
-### Backend Services
-
-#### **agents.controller.ts** (API Endpoints)
-- **Location**: [src/agents/agents.controller.ts](uris-backend/src/agents/agents.controller.ts)
-- **Endpoints**:
-  ```
-  GET  /agents/:datasetId
-       → Returns { dataset: {...}, runs: [...] }
-       → Used to fetch dataset and run history
-       
-  POST /agents/:datasetId/orchestrate
-       → Body: empty or { }
-       → Returns { run: {...}, pipeline: {...} }
-       → Triggers new orchestration
-       
-  GET  /agents/:datasetId/runs/:runId
-       → Returns { run: {...}, pipeline: {...} }
-       → Fetches specific run result
-  ```
-
-#### **agents.service.ts** (Business Logic)
-- **Location**: [src/agents/agents.service.ts](uris-backend/src/agents/agents.service.ts)
-- **Key Methods**:
-
-  **orchestrateAgents(datasetId)**
-  - Creates pending run record
-  - Calls agents microservice at `https://uris-agent.onrender.com/pipeline/run`
-  - Parses response for metrics (ADFI, privacy risk, evaluation scores)
-  - Updates run with results and completion status
-  - Returns combined run and pipeline results
-  
-  **getDatasetRuns(datasetId)**
-  - Fetches dataset metadata from database
-  - Retrieves last 10 runs for dataset
-  - Returns: `{ dataset: {...}, runs: [...] }`
-  - Dataset fields: id, name, rowCount, columnCount, sizeBytes, profileMeta, status
-  
-  **getRunResult(runId)**
-  - Fetches specific run with complete pipeline results
-  - Returns: `{ run: {...}, pipeline: {...} }`
-
-#### **dataset.service.ts** (Dataset Management)
-- **Location**: [src/dataset/dataset.service.ts](uris-backend/src/dataset/dataset.service.ts)
-- **Key Methods**:
-  - `uploadDataset()` - Handle CSV upload to S3 and database
-  - `profileDataset()` - Analyze column structure and cardinality
-  - `getDatasets()` - List all uploaded datasets
-  - `getDataset()` - Fetch specific dataset metadata
-
-#### **s3.service.ts** (AWS Integration)
-- **Location**: [src/aws/s3.service.ts](uris-backend/src/aws/s3.service.ts)
-- **Key Methods**:
-  - `uploadFile()` - Store file to S3 bucket
-  - `getFile()` - Retrieve file from S3
-  - `deleteFile()` - Remove file from S3
-
-## API Contract Specifications
-
-### Response Format: `/agents/{datasetId}`
-
-```typescript
+```json
 {
-  "dataset": {
-    "id": "uuid-string",
-    "name": "titanic_clean",
-    "rowCount": 891,
-    "columnCount": 4,
-    "sizeBytes": 65432,
-    "profileMeta": {
-      "columns": [
-        {
-          "name": "PassengerId",
-          "type": "integer",
-          "cardinality": 891,
-          "nullCount": 0
-        },
-        // ... more columns
-      ]
-    },
-    "status": "active",
-    "createdAt": "2026-03-03T10:30:00Z"
-  },
-  "runs": [
-    {
-      "id": "run-uuid-1",
-      "datasetId": "dataset-uuid",
-      "status": "completed",
-      "adfiScore": 87.3,
-      "privacy_risk_score": 0.25,
-      "result": {
-        "adfiScore": 87.3,
-        "evaluation": {
-          "completeness": 0.94,
-          "uniqueness": 0.92,
-          "balance": 0.85
-        },
-        "compliance": {
-          "privacy_risk": "low",
-          // ... more compliance data
-        }
-      },
-      "createdAt": "2026-03-03T11:00:00Z",
-      "completedAt": "2026-03-03T11:05:30Z"
-    }
-    // ... more runs
-  ]
+  "task_id": "run-cmmrx9wj",
+  "agent": "Validation",
+  "status": "rejected",
+  "confidence": 0.95,
+  "risk_score": 0.82,
+  "reasoning": "712 exact row matches found. Privacy threshold violated.",
+  "recommendation": "Switch to CTGAN. Reduce augmentation budget to 300 rows."
 }
 ```
 
-### Response Format: `POST /agents/{datasetId}/orchestrate`
+---
+
+## API Reference
+
+### `GET /agents/:datasetId`
+Returns dataset metadata and full run history.
 
 ```typescript
 {
-  "run": {
-    "id": "run-uuid-new",
-    "datasetId": "dataset-uuid",
-    "status": "completed",
-    "adfiScore": 87.3,
-    "privacy_risk_score": 0.25,
-    "createdAt": "2026-03-03T11:00:00Z",
-    "completedAt": "2026-03-03T11:05:30Z"
-  },
-  "pipeline": {
-    "adfiScore": 87.3,
-    "evaluation": {
-      "completeness": 0.94,
-      "uniqueness": 0.92,
-      "balance": 0.85
-    },
-    "compliance": {
-      "privacy_risk": "low",
-      "pii_detected": ["name_col"],
-      "sensitivity_score": 0.3
-    },
-    "synthesis": {
-      "feasibility": 0.89,
-      "estimated_rows": 891
-    },
-    "validation": {
-      "passed": true,
-      "checks_total": 15,
-      "checks_passed": 15
-    }
+  dataset: { id, name, rowCount, columnCount, sizeBytes, profileMeta, status },
+  runs: [{ id, status, adfiScore, privacy_risk_score, result, createdAt }]
+}
+```
+
+### `POST /agents/:datasetId/orchestrate`
+Triggers a new pipeline run. Returns run record and full pipeline output.
+
+```typescript
+{
+  run: { id, status, adfiScore, privacy_risk_score, createdAt, completedAt },
+  pipeline: {
+    adfiScore: 0.921,
+    evaluation: { completeness, uniqueness, balance },
+    compliance: { privacy_risk, pii_detected, sensitivity_score },
+    synthesis: { strategy, rows_generated, attempt_count },
+    validation: { passed, checks_total, checks_passed }
   }
 }
 ```
+
+### `GET /agents/:datasetId/runs/:runId`
+Returns a specific run with complete pipeline output.
+
+---
 
 ## Database Schema
 
-### Key Tables (Prisma)
+```prisma
+model Dataset {
+  id          String   @id
+  name        String
+  rowCount    Int
+  columnCount Int
+  sizeBytes   BigInt
+  profileMeta Json     // Column types, cardinality, null counts
+  status      String   // active | archived
+  s3Path      String
+  createdAt   DateTime
+  runs        Run[]
+}
 
-**Dataset**
-```
-- id (String, @id)
-- name (String)
-- rowCount (Int)
-- columnCount (Int)
-- sizeBytes (BigInt)
-- profileMeta (Json) - Column metadata
-- status (String) - 'active', 'archived', etc.
-- s3Path (String) - S3 object key
-- createdAt (DateTime)
-- updatedAt (DateTime)
-- runs (Run[]) - Relationship to runs
+model Run {
+  id               String    @id
+  datasetId        String
+  status           String    // pending | running | completed | failed
+  adfiScore        Float
+  privacy_risk_score Float
+  result           Json      // Complete pipeline output
+  createdAt        DateTime
+  completedAt      DateTime?
+  dataset          Dataset
+}
 ```
 
-**Run**
-```
-- id (String, @id)
-- datasetId (String, @fk)
-- status (String) - 'pending', 'running', 'completed', 'failed'
-- adfiScore (Float)
-- privacy_risk_score (Float)
-- result (Json) - Complete pipeline output
-- createdAt (DateTime)
-- completedAt (DateTime)
-- dataset (Dataset) - Relationship to dataset
-```
+---
 
 ## Setup & Installation
 
 ### Prerequisites
-- Node.js 18+ with npm
-- Python 3.10+ with pip
+- Node.js 18+
+- Python 3.10+
 - PostgreSQL 14+
-- AWS account with S3 bucket
-- Docker (optional for database)
+- AWS account with S3 bucket and Bedrock access (Nova 2 Lite)
 
-### Environment Configuration
+### Environment Variables
 
-**Backend (.env)**
-```
+**Backend (`uris-backend/.env`)**
+```env
 DATABASE_URL=postgresql://user:password@localhost:5432/uris_db
-AWS_ACCESS_KEY_ID=your-aws-key
-AWS_SECRET_ACCESS_KEY=your-aws-secret
-AWS_S3_BUCKET=your-bucket-name
+AWS_ACCESS_KEY_ID=your-key
+AWS_SECRET_ACCESS_KEY=your-secret
+AWS_S3_BUCKET=your-bucket
 AWS_REGION=us-east-1
-AGENTS_MICROSERVICE_URL=https://uris-agent.onrender.com
-NODE_ENV=development
+AGENTS_MICROSERVICE_URL=
 PORT=5000
 ```
 
-**Frontend (.env.local)**
-```
-NEXT_PUBLIC_API_URL=https://uris.onrender.com
+**Frontend (`uris-frontend/.env.local`)**
+```env
+NEXT_PUBLIC_API_URL=
 ```
 
-### Installation Steps
+### Run Locally
 
 ```bash
-# 1. Backend setup
+# Agents microservice
+cd uris-agents
+pip install -r requirements.txt
+python -m uvicorn main:app --reload --port 8000
+
+# Backend
 cd uris-backend
 npm install
 npx prisma migrate dev
 npm run start:dev
 
-# 2. Frontend setup (new terminal)
+# Frontend
 cd uris-frontend
 npm install
 npm run dev
-
-# 3. Agents microservice (new terminal)
-cd uris-agents
-pip install -r requirements.txt
-python -m uvicorn main:app --reload --port 8000
 ```
-
-## Key Metrics Explained
-
-### ADFI Score (Assay Data Fidelity Index)
-- **Range**: 0-100%
-- **Calculation**: Weighted combination of quality metrics
-- **Components**:
-  - Completeness: How many values are non-null
-  - Uniqueness: How diverse the values are (low cardinality ≠ diverse)
-  - Balance: Distribution uniformity across categories
-- **Interpretation**: Higher = better data quality for analysis
-
-### Privacy Risk Score
-- **Range**: 0.0-1.0 (0% to 100%)
-- **Assessment**: Presence of PII, cardinality of identifiers
-- **Flags**: Name columns, ID columns, email patterns
-- **Risk Levels**: Low (<0.3), Medium (0.3-0.7), High (>0.7)
-
-### Quality Metrics
-- **Completeness** (0-1): Fraction of non-null values
-- **Uniqueness** (0-1): Cardinality ÷ Row Count
-- **Balance** (0-1): Distribution evenness (1.0 = perfectly uniform)
-
-## Error Handling & Troubleshooting
-
-### Common Issues
-
-**Backend Build Fails**
-- Check Node.js version: `node --version` (require v18+)
-- Clear cache: `rm -r node_modules package-lock.json && npm install`
-- Verify DATABASE_URL connection
-
-**Orchestration Timeout**
-- Ensure agents microservice is running: `curl https://uris-agent.onrender.com/docs`
-- Check agents logs for errors
-- Increase timeout in agents.service.ts if needed
-
-**S3 Upload Fails**
-- Verify AWS credentials in .env
-- Check S3 bucket exists and is accessible
-- Verify IAM permissions for PutObject, GetObject
-
-**Frontend Can't Connect to Backend**
-- Verify NEXT_PUBLIC_API_URL is correct
-- Check backend is running: `curl https://uris.onrender.com/health`
-- Check CORS configuration in backend
-
-## Development Workflow
-
-### Adding New Metrics
-1. Update agents microservice to calculate metric
-2. Modify pipeline response schema
-3. Update Run type in Prisma schema
-4. Create display component in frontend
-5. Add metric extraction in AgentResult.tsx
-
-### Extending Agents
-1. Create new agent in `uris-agents/agents/{agent_name}/`
-2. Update orchestrator.py to route data to agent
-3. Register in agents microservice
-4. Update backend to call new agent endpoint
-5. Add UI to display results
-
-### Database Migrations
-```bash
-cd uris-backend
-npx prisma migrate dev --name "add_new_field"
-```
-
-## Production Deployment
-
-### Considerations
-- Use managed database (RDS)
-- Store AWS credentials in secrets manager
-- Enable request logging and monitoring
-- Implement rate limiting on orchestrate endpoint
-- Use CDN for frontend assets
-- Set up health check endpoints
-
-## Contributing
-
-### Code Quality
-- Run TypeScript compiler: `npm run build`
-- Run linter: `npm run lint`
-- Format code: `npm run format`
-- Run tests: `npm test`
-
-### Testing
-- Backend: Jest test suite in `src/**/*.spec.ts`
-- Frontend: React Testing Library in components
-- E2E: Playwright tests for orchestration flow
-
-## Performance Metrics
-
-### Typical Orchestration Time
-- Small datasets (<1MB): 5-15 seconds
-- Medium datasets (1-100MB): 15-60 seconds
-- Large datasets (>100MB): 60-300 seconds
-
-### Database Query Times
-- GetDatasetRuns: <100ms
-- GetRunResult: <50ms
-- CreateRun: <30ms
 
 ---
 
-**Last Updated**: March 16, 2026  
-**System Version**: 1.0.0  
-**Status**: Production Ready
+## Performance
+
+| Dataset Size | Pipeline Time |
+|---|---|
+| < 1MB | 5 – 15 seconds |
+| 1MB – 100MB | 15 – 60 seconds |
+| > 100MB | 60 – 300 seconds |
+
+| Database Operation | Typical Latency |
+|---|---|
+| GetDatasetRuns | < 100ms |
+| GetRunResult | < 50ms |
+| CreateRun | < 30ms |
+
+---
+
+
+## Built With
+
+- [Amazon Nova 2 Lite](https://aws.amazon.com/bedrock/nova/) — Agent reasoning via AWS Bedrock
+- [SDV — Synthetic Data Vault](https://sdv.dev/) — GaussianCopula & CTGAN synthesis
+- [NestJS](https://nestjs.com/) — Backend framework
+- [Next.js 14](https://nextjs.org/) — Frontend framework
+- [Prisma](https://www.prisma.io/) — Database ORM
+- [FastAPI](https://fastapi.tiangolo.com/) — Agents microservice
+
+---
+
+*Amazon Nova AI Hackathon 2026 · #AmazonNova · Built by Ademola Deremi*
