@@ -1,3 +1,4 @@
+[![URIS Presentation Demo](https://img.youtube.com/vi/HrdMXX7r1v4/maxresdefault.jpg)](https://www.youtube.com/watch?v=HrdMXX7r1v4)
 # URIS: Unified Reasoning Intelligence System
 
 > **Autonomous Data Intelligence, Powered by Amazon Nova 2 Lite**
